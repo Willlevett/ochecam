@@ -120,7 +120,18 @@ input[type="range"] { width: 100%; accent-color: var(--sisal); }
   aspect-ratio: var(--ar, 4 / 3); max-height: 36vh; min-height: 160px; border: 1px solid var(--slate-3);
 }
 .cam.big { max-height: 60vh; }
-.cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; }
+.zoompanel { background: var(--slate-2); border: 1px solid var(--slate-3); border-radius: 12px; padding: 14px; display: grid; gap: 14px; }
+.zp-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.zp-head h2 { margin: 0; font-size: 18px; }
+.zp-head .btn { min-height: 40px; padding: 8px 12px; }
+.zp-row { display: grid; gap: 8px; }
+.zp-row .lab { display: flex; justify-content: space-between; gap: 10px; font-weight: 600; }
+.zp-row .lab span { color: var(--chalk-dim); font-weight: 500; }
+.zoompanel .seg { display: flex; }
+.zoompanel .seg button { flex: 1 1 auto; }
+.wrapseg { flex-wrap: wrap; }
+.zoompanel .hint { margin: 0; }
 .cam canvas.ov { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 .cam .camtools { position: absolute; right: 8px; top: 8px; display: flex; gap: 6px; }
 .cam .camtools button { background: rgba(16, 22, 20, 0.72); border: 1px solid rgba(241, 238, 228, 0.18); color: var(--chalk); border-radius: 999px; min-height: 36px; padding: 6px 12px; font-size: 14px; font-weight: 600; backdrop-filter: blur(6px); }
@@ -327,7 +338,7 @@ input[type="range"] { width: 100%; accent-color: var(--sisal); }
       <ol>
         <li><b>Off to one side or below</b>, about 1 m from the board, out of the line of fire.</li>
         <li><b>At an angle</b> of roughly 20–45°, not straight on. Darts read best when you can see their length.</li>
-        <li><b>Fill the frame.</b> Get close or zoom so the board is large. Keep the phone dead still.</li>
+        <li><b>Fill the frame.</b> Get close, or tap <b>Zoom</b> and pick the telephoto lens if your phone has one. Keep the phone dead still.</li>
         <li><b>Even light</b> with soft shadows. A ring light around the board is ideal.</li>
       </ol>
     </div>
@@ -355,10 +366,23 @@ input[type="range"] { width: 100%; accent-color: var(--sisal); }
         <canvas class="ov" id="overlay"></canvas>
         <div class="camtools">
           <button type="button" id="calibBtn">Line up board</button>
+          <button type="button" id="zoomBtn">Zoom</button>
           <button type="button" id="sizeBtn">Bigger</button>
         </div>
         <div class="msg" id="camMsg" hidden><div><span id="camMsgText"></span><button class="btn" id="camMsgBtn" type="button" hidden></button></div></div>
         <div class="loupe" id="loupe" hidden><canvas id="loupeCanvas" width="264" height="264"></canvas></div>
+      </div>
+      <div class="zoompanel" id="zoomPanel" hidden>
+        <div class="zp-head"><h2>Zoom</h2><button class="btn ghost" type="button" id="zoomClose">Close</button></div>
+        <div class="zp-row" id="lensRow" hidden><span class="lab">Lens</span><div class="seg wrapseg" id="lensSeg" role="group" aria-label="Camera lens"></div></div>
+        <label class="zp-row" id="hwZoomRow" for="zoom" hidden><span class="lab">Camera zoom <span id="zoomVal"></span></span>
+          <input type="range" id="zoom" min="1" max="4" step="0.1"></label>
+        <div class="zp-row"><span class="lab">Show</span>
+          <div class="seg" id="viewSeg" role="group" aria-label="What the camera window shows">
+            <button type="button" data-v="board" aria-pressed="true">Board close-up</button>
+            <button type="button" data-v="full" aria-pressed="false">Whole picture</button>
+          </div></div>
+        <p class="hint" id="zoomHint"></p>
       </div>
       <div class="calib" id="calib" hidden>
         <svg viewBox="-100 -100 200 200" id="calibDiagram" aria-hidden="true"></svg>
@@ -433,8 +457,6 @@ input[type="range"] { width: 100%; accent-color: var(--sisal); }
       <label class="switch" for="shadowOpt"><span>Ignore shadows</span><input type="checkbox" id="shadowOpt"></label>
       <label class="switch" for="debugOpt"><span>Show what the camera detects</span><input type="checkbox" id="debugOpt"></label>
       <label class="switch" for="voiceOpt2"><span>Call the scores out loud</span><input type="checkbox" id="voiceOpt2"></label>
-      <label class="block" for="zoom" id="zoomRow" hidden><span class="lab">Camera zoom <span id="zoomVal"></span></span>
-        <input type="range" id="zoom" min="1" max="4" step="0.1"></label>
       <div class="row">
         <button class="btn" type="button" id="recalBtn">Line up board again</button>
         <button class="btn" type="button" id="camToggle">Turn camera off</button>
@@ -633,7 +655,7 @@ function computeROI(H, vw, vh, radius, maxDim) {
 function buildModel(H, vw, vh, opts = {}) {
   const Hinv = inv3(H);
   const cam = cameraModel(H, vw, vh);
-  const roi = computeROI(H, vw, vh, opts.roiRadius || 290, opts.maxDim || 640);
+  const roi = computeROI(H, vw, vh, opts.roiRadius || 290, opts.maxDim || 800);
   const c = apply(H, 0, 0);
   let acc = 0;
   for (let k = 0; k < 16; k++) {
@@ -1384,6 +1406,7 @@ const saved = loadStore();
 const settings = Object.assign({
   threshold: 24, tipOffsetMM: 18, shadows: true, debug: false, voice: true,
   start: 501, doubleOut: true, players: ['Player 1', 'Player 2'], lastMode: 'camera',
+  deviceId: null, zoomLevel: null, view: 'board',
 }, saved.settings || {});
 let match = saved.match || null;
 let calib = saved.calib || null;
@@ -1399,6 +1422,7 @@ const maskCanvas = document.createElement('canvas'), mctx = maskCanvas.getContex
 /* ---------- runtime state ---------- */
 let stream = null, track = null, model = null, detecting = false, calibrating = false;
 let calPts = [], dragIdx = -1, lastProc = 0, wakeLock = null;
+let devices = [], frozenWin = null;
 let boardHasDarts = false, lastMaskRef = null;
 let pad = { edit: null, mult: 1 };
 let focusTurn = null; // index of an older turn picked from the log for fixing
@@ -1520,7 +1544,7 @@ function setManual() {
 }
 
 /* ---------- camera ---------- */
-async function startCamera() {
+async function startCamera(deviceId = settings.deviceId) {
   $('#game').classList.remove('manual');
   $('#camToggle').textContent = 'Turn camera off';
   setStatus('Starting camera', 'warn');
@@ -1533,12 +1557,15 @@ async function startCamera() {
     return;
   }
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
-    });
+    // Ask for the sharpest picture the camera offers: more pixels on the board = better reads from further away.
+    const base = { width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30 } };
+    const video = deviceId ? Object.assign({ deviceId: { exact: deviceId } }, base) : Object.assign({ facingMode: { ideal: 'environment' } }, base);
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
   } catch (e) {
     const name = e && e.name;
+    if (deviceId && (name === 'OverconstrainedError' || name === 'NotFoundError' || name === 'NotReadableError')) {
+      settings.deviceId = null; persist(); return startCamera(null);
+    }
     cameraFailed(inFrame && name === 'NotAllowedError'
       ? 'The camera is blocked inside this preview window. Open OcheCam from its own web address to let it watch the board. You can still score by tapping.'
       : name === 'NotAllowedError'
@@ -1551,9 +1578,13 @@ async function startCamera() {
   track = stream.getVideoTracks()[0];
   try { await video.play(); } catch (e) { /* autoplay with muted should work */ }
   for (let i = 0; i < 50 && !video.videoWidth; i++) await new Promise(r => setTimeout(r, 100));
-  hideCamMsg(); setupZoom(); requestWake();
+  hideCamMsg(); requestWake();
+  await listCameras();
+  if (settings.zoomLevel && hasHwZoom()) { try { await track.applyConstraints({ advanced: [{ zoom: settings.zoomLevel }] }); } catch (e) { /* ignore */ } }
+  renderZoomPanel();
   cam.style.setProperty('--ar', `${video.videoWidth} / ${video.videoHeight}`);
-  if (calib && calib.vw === video.videoWidth && calib.vh === video.videoHeight) {
+  if (calib && calib.vw === video.videoWidth && calib.vh === video.videoHeight
+      && (!calib.deviceId || calib.deviceId === currentDeviceId()) && Math.abs((calib.zoom || 1) - currentZoom()) < 0.05) {
     applyCalibration(calib.pts, true);
     toast('Using your last board setup. If the lines are off the wires, tap “Line up board”.', 4500);
   } else beginCalibration();
@@ -1573,22 +1604,64 @@ async function requestWake() {
   try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { wakeLock = null; }
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && stream) requestWake(); });
-function setupZoom() {
-  const row = $('#zoomRow');
-  let caps = null;
-  try { caps = track && track.getCapabilities ? track.getCapabilities() : null; } catch (e) { caps = null; }
-  if (!caps || !caps.zoom) { row.hidden = true; return; }
-  const z = $('#zoom');
-  z.min = caps.zoom.min; z.max = caps.zoom.max; z.step = caps.zoom.step || 0.1;
-  const cur = (track.getSettings && track.getSettings().zoom) || caps.zoom.min;
-  z.value = cur; $('#zoomVal').textContent = `${(+cur).toFixed(1)}×`;
-  row.hidden = false;
+/* ---------- lenses and zoom ---------- */
+function currentDeviceId() { try { return (track && track.getSettings && track.getSettings().deviceId) || null; } catch (e) { return null; } }
+function zoomCaps() { try { const c = track && track.getCapabilities ? track.getCapabilities() : null; return c && c.zoom && c.zoom.max > c.zoom.min ? c.zoom : null; } catch (e) { return null; } }
+function hasHwZoom() { return !!zoomCaps(); }
+function currentZoom() { try { return (track && track.getSettings && track.getSettings().zoom) || 1; } catch (e) { return 1; } }
+async function listCameras() {
+  try {
+    const all = await navigator.mediaDevices.enumerateDevices();
+    devices = all.filter(d => d.kind === 'videoinput' && !/front|user|facetime|selfie/i.test(d.label));
+  } catch (e) { devices = []; }
 }
+function lensName(d, i) {
+  const l = (d.label || '').trim();
+  if (/telephoto/i.test(l)) return 'Telephoto (zoom)';
+  if (/ultra ?wide/i.test(l)) return 'Ultra wide';
+  if (/triple/i.test(l)) return 'Triple';
+  if (/dual wide/i.test(l)) return 'Dual wide';
+  if (/dual/i.test(l)) return 'Dual';
+  if (/^back camera$/i.test(l)) return 'Main';
+  if (/facing back/i.test(l) || !l) return `Back ${i + 1}`;
+  return l.replace(/^Back\s+/i, '').replace(/\s+Camera$/i, '').slice(0, 20);
+}
+function renderZoomPanel() {
+  const cur = currentDeviceId();
+  $('#lensRow').hidden = devices.length < 2;
+  $('#lensSeg').innerHTML = devices.map((d, i) =>
+    `<button type="button" data-id="${esc(d.deviceId)}" aria-pressed="${d.deviceId === cur}">${esc(lensName(d, i))}</button>`).join('');
+  const zc = zoomCaps(), z = $('#zoom');
+  $('#hwZoomRow').hidden = !zc;
+  if (zc) {
+    z.min = zc.min; z.max = zc.max; z.step = zc.step || 0.1; z.value = currentZoom();
+    $('#zoomVal').textContent = `${(+z.value).toFixed(1)}×`;
+  }
+  segSet('viewSeg', settings.view);
+  const res = video.videoWidth ? `Camera picture: ${video.videoWidth}×${video.videoHeight}. ` : '';
+  $('#zoomHint').textContent = res + (zc || devices.length > 1
+    ? 'Zooming with the camera gives it real extra detail on the board. After changing lens or zoom you line the board up again.'
+    : 'This phone’s browser doesn’t offer camera zoom, so OcheCam uses the full-resolution picture. Board close-up just makes it easier to see. If darts get misread from far away, move the phone a little closer.');
+}
+async function switchLens(id) {
+  if (id === currentDeviceId()) return;
+  settings.deviceId = id; settings.zoomLevel = null; persist();
+  stopCamera();
+  await startCamera(id);
+  $('#zoomPanel').hidden = false; renderZoomPanel();
+}
+$('#lensSeg').addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (b) switchLens(b.dataset.id); });
 $('#zoom').addEventListener('input', async e => {
   const v = +e.target.value; $('#zoomVal').textContent = `${v.toFixed(1)}×`;
   try { await track.applyConstraints({ advanced: [{ zoom: v }] }); } catch (err) { /* unsupported */ }
 });
-$('#zoom').addEventListener('change', () => { if (model) { toast('Zoom changed. Line up the board again.'); closeSheets(); beginCalibration(); } });
+$('#zoom').addEventListener('change', e => {
+  settings.zoomLevel = +e.target.value; persist();
+  if (model || calibrating) { toast('Zoom changed. Line the board up again.'); beginCalibration(); }
+});
+$$('#viewSeg button').forEach(b => b.addEventListener('click', () => { settings.view = b.dataset.v; segSet('viewSeg', settings.view); persist(); }));
+$('#zoomBtn').addEventListener('click', () => { const p = $('#zoomPanel'); p.hidden = !p.hidden; if (!p.hidden) renderZoomPanel(); });
+$('#zoomClose').addEventListener('click', () => { $('#zoomPanel').hidden = true; });
 
 /* ---------- board alignment ---------- */
 function beginCalibration() {
@@ -1630,7 +1703,7 @@ function calibQuality(pts) {
   rad /= 4;
   const camm = CV.cameraModel(H, video.videoWidth, video.videoHeight);
   const warns = [];
-  if (rad < 150) warns.push('The board is small in the picture. Move the phone closer or zoom in for better accuracy.');
+  if (rad < 150) warns.push('The board is small in the picture. Tap Zoom to use a zoom lens if you have one, or move the phone closer.');
   if (camm.angle < 10) warns.push('You’re filming almost straight on. Darts read better from 20–45° off to the side or below.');
   if (camm.angle > 62) warns.push('That’s a very steep angle. Move the phone a little more in front of the board.');
   return { H, warn: warns.join(' ') };
@@ -1655,7 +1728,7 @@ function applyCalibration(pts, silent) {
   const H = CV.homographyFromCal(pts);
   if (!H) { toast('Couldn’t use those points. Try again.'); return false; }
   model = CV.buildModel(H, video.videoWidth, video.videoHeight);
-  calib = { pts: pts.map(p => [p[0], p[1]]), vw: video.videoWidth, vh: video.videoHeight };
+  calib = { pts: pts.map(p => [p[0], p[1]]), vw: video.videoWidth, vh: video.videoHeight, deviceId: currentDeviceId(), zoom: currentZoom() };
   persist();
   tracker.setModel(model); tracker.setOptions(cvOpts());
   calibrating = false; detecting = true; boardHasDarts = false;
@@ -1684,14 +1757,38 @@ $('#autoBtn').addEventListener('click', () => {
 });
 
 /* overlay geometry: video pixels <-> screen pixels inside the camera box */
+// The camera window can show the whole picture or a close-up cropped around the board.
+function boardWindow(H, r) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let k = 0; k < 36; k++) {
+    const a = k * Math.PI / 18, p = CV.apply(H, 250 * Math.cos(a), 250 * Math.sin(a));
+    x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]);
+  }
+  if (![x0, y0, x1, y1].every(isFinite)) return null;
+  let w = (x1 - x0) * 1.08, h = (y1 - y0) * 1.08;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, ar = r.width / Math.max(1, r.height);
+  if (w / h < ar) w = h * ar; else h = w / ar;
+  w = Math.min(w, vw); h = Math.min(h, vh);
+  return { x: Math.max(0, Math.min(vw - w, cx - w / 2)), y: Math.max(0, Math.min(vh - h, cy - h / 2)), w, h };
+}
+function viewWindow(r) {
+  const full = { x: 0, y: 0, w: video.videoWidth || 16, h: video.videoHeight || 9 };
+  if (frozenWin) return frozenWin;
+  if (settings.view !== 'board' || !video.videoWidth) return full;
+  let H = null;
+  if (calibrating) { if (calPts.length === 4) H = CV.homographyFromCal(calPts); } else if (model) H = model.H;
+  const win = H && boardWindow(H, r);
+  return win && win.w < full.w * 0.9 ? win : full;
+}
 function viewRect() {
-  const r = cam.getBoundingClientRect(), vw = video.videoWidth || 16, vh = video.videoHeight || 9;
-  const s = Math.min(r.width / vw, r.height / vh);
-  return { r, s, ox: (r.width - vw * s) / 2, oy: (r.height - vh * s) / 2 };
+  const r = cam.getBoundingClientRect(), win = viewWindow(r);
+  const s = Math.min(r.width / win.w, r.height / win.h);
+  return { r, s, win, ox: (r.width - win.w * s) / 2, oy: (r.height - win.h * s) / 2 };
 }
 function toVideo(e) {
   const v = viewRect();
-  return [(e.clientX - v.r.left - v.ox) / v.s, (e.clientY - v.r.top - v.oy) / v.s];
+  return [(e.clientX - v.r.left - v.ox) / v.s + v.win.x, (e.clientY - v.r.top - v.oy) / v.s + v.win.y];
 }
 function showLoupe(e, p) {
   const v = viewRect();
@@ -1707,6 +1804,7 @@ function showLoupe(e, p) {
 }
 overlay.addEventListener('pointerdown', e => {
   if (!calibrating) return;
+  frozenWin = viewRect().win;
   const p = toVideo(e);
   if (calPts.length === 4) {
     const v = viewRect();
@@ -1721,7 +1819,7 @@ overlay.addEventListener('pointermove', e => {
   if (dragIdx < 0) return;
   calPts[dragIdx] = toVideo(e); showLoupe(e, calPts[dragIdx]);
 });
-const endDrag = () => { if (dragIdx >= 0) { dragIdx = -1; loupe.hidden = true; renderCalib(); } };
+const endDrag = () => { frozenWin = null; if (dragIdx >= 0) { dragIdx = -1; loupe.hidden = true; renderCalib(); } };
 overlay.addEventListener('pointerup', endDrag);
 overlay.addEventListener('pointercancel', endDrag);
 
@@ -1767,7 +1865,8 @@ function drawOverlay() {
   octx.setTransform(dpr, 0, 0, dpr, 0, 0);
   octx.clearRect(0, 0, v.r.width, v.r.height);
   if (!video.videoWidth || !stream) return;
-  const T = (x, y) => [v.ox + x * v.s, v.oy + y * v.s];
+  const T = (x, y) => [v.ox + (x - v.win.x) * v.s, v.oy + (y - v.win.y) * v.s];
+  try { octx.drawImage(video, v.win.x, v.win.y, v.win.w, v.win.h, v.ox, v.oy, v.win.w * v.s, v.win.h * v.s); } catch (e) { /* frame not ready */ }
   let H = null;
   if (calibrating && calPts.length === 4) H = CV.homographyFromCal(calPts);
   else if (!calibrating && model) H = model.H;
@@ -2092,7 +2191,7 @@ $('#winNext').addEventListener('click', () => {
 });
 
 /* ---------- boot ---------- */
-window.__ochecam = { tracker, getModel: () => model };
+window.__ochecam = { tracker, getModel: () => model, view: () => { const v = viewRect(); return { win: v.win, s: v.s, box: [v.r.width, v.r.height] }; }, settings };
 showSetup();
 })();
 </script>
