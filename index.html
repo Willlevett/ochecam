@@ -1,0 +1,2101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OcheCam</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#151d1a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a one-screen scoring console. Camera window on top (left in landscape),
+   chalkboard score panel below, a keypad sheet that slides up for manual entry and fixes. */
+:root {
+  --slate: #151d1a;       /* chalkboard */
+  --slate-2: #1c2622;     /* raised panel */
+  --slate-3: #2a3833;     /* rules, inputs */
+  --chalk: #f1eee4;       /* chalk text */
+  --chalk-dim: #9faba4;   /* secondary chalk */
+  --sisal: #e8d4a0;       /* bristle cream: the active player */
+  --red: #e2553f;         /* board red: bust, alerts */
+  --green: #46b077;       /* board green: checkout, good reads */
+  --ink: #101614;         /* text on light fills */
+  --font-score: "Big Shoulders Display", "Oswald", "Arial Narrow", Impact, sans-serif;
+  --font-ui: "Barlow Semi Condensed", "Barlow", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --radius: 10px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--slate);
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(241, 238, 228, 0.045), transparent 55%),
+    radial-gradient(ellipse at 90% 100%, rgba(241, 238, 228, 0.03), transparent 50%);
+  background-repeat: no-repeat;
+  color: var(--chalk);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; touch-action: manipulation; }
+:focus-visible { outline: 2px solid var(--sisal); outline-offset: 2px; }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* ---------- shared controls ---------- */
+.btn {
+  border: 1px solid var(--slate-3); background: var(--slate-2); border-radius: var(--radius);
+  padding: 12px 16px; font-weight: 600; letter-spacing: 0.02em; min-height: 48px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--sisal); color: var(--ink); border-color: var(--sisal); }
+.btn.ghost { background: transparent; }
+.btn.danger { color: var(--red); }
+.btn[disabled] { opacity: 0.4; pointer-events: none; }
+.eyebrow { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--chalk-dim); font-weight: 600; }
+.hint { color: var(--chalk-dim); font-size: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--slate-3); border-radius: var(--radius); overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 10px 14px; min-height: 44px; font-weight: 600; color: var(--chalk-dim); }
+.seg button[aria-pressed="true"] { background: var(--chalk); color: var(--ink); }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+.switch input { width: 22px; height: 22px; accent-color: var(--sisal); }
+input[type="text"] {
+  width: 100%; background: var(--slate); border: 1px solid var(--slate-3); border-radius: 8px;
+  padding: 10px 12px; min-height: 44px; font-weight: 600;
+}
+input[type="range"] { width: 100%; accent-color: var(--sisal); }
+
+/* ---------- setup screen ---------- */
+#setup { min-height: 100%; padding-block: 28px 40px; display: grid; gap: 28px; max-width: 760px; margin: 0 auto; align-content: start; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.brand h1 { margin: 0; font-family: var(--font-score); font-weight: 900; font-size: clamp(48px, 13vw, 84px); line-height: 0.9; letter-spacing: 0.01em; text-wrap: balance; }
+.brand h1 span { color: var(--red); }
+.brand p { margin: 8px 0 0; max-width: 46ch; color: var(--chalk-dim); font-size: 17px; }
+.setup-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.card { background: var(--slate-2); border: 1px solid var(--slate-3); border-radius: 14px; padding: 18px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.players { display: grid; gap: 10px; }
+.player-row { display: grid; grid-template-columns: 28px 1fr 40px; gap: 8px; align-items: center; }
+.player-row .n { font-family: var(--font-score); font-weight: 800; font-size: 22px; color: var(--chalk-dim); text-align: center; }
+.player-row button { width: 40px; height: 44px; border: 0; background: transparent; color: var(--chalk-dim); font-size: 22px; }
+.opt-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.start-row { display: grid; gap: 10px; grid-template-columns: 1fr; }
+@media (min-width: 520px) { .start-row { grid-template-columns: 2fr 1fr; } }
+.place { display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center; }
+.place svg { width: 100%; height: auto; }
+.place ol { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--chalk-dim); font-size: 15px; }
+.place ol b { color: var(--chalk); font-weight: 600; }
+@media (max-width: 420px) { .place { grid-template-columns: 1fr; } .place svg { max-width: 160px; } }
+.resume { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; border: 1px dashed var(--sisal); }
+
+/* ---------- game screen ---------- */
+#game { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
+#game.calibrating .board-panel, #game.calibrating .actions { display: none; }
+.topbar { display: flex; align-items: center; gap: 10px; padding-block: 8px; }
+.topbar .logo { font-family: var(--font-score); font-weight: 900; font-size: 22px; letter-spacing: 0.02em; }
+.topbar .logo span { color: var(--red); }
+.chip {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  background: var(--slate-2); border: 1px solid var(--slate-3); font-weight: 600; font-size: 14px; white-space: nowrap;
+}
+.chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--chalk-dim); display: inline-block; }
+.chip[data-tone="live"] i { background: var(--green); box-shadow: 0 0 0 4px rgba(70, 176, 119, 0.2); animation: pulse 1.6s ease-in-out infinite; }
+.chip[data-tone="warn"] i { background: var(--sisal); }
+.chip[data-tone="alert"] i { background: var(--red); }
+@keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(70, 176, 119, 0); } }
+.iconbtn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--slate-3); background: var(--slate-2); display: grid; place-items: center; }
+.iconbtn svg { width: 22px; height: 22px; }
+
+.stage { display: grid; gap: 10px; min-height: 0; overflow-y: auto; align-content: start; grid-template-rows: auto auto; }
+.cam {
+  position: relative; background: #000; border-radius: 12px; overflow: hidden; width: 100%;
+  aspect-ratio: var(--ar, 4 / 3); max-height: 36vh; min-height: 160px; border: 1px solid var(--slate-3);
+}
+.cam.big { max-height: 60vh; }
+.cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.cam canvas.ov { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.cam .camtools { position: absolute; right: 8px; top: 8px; display: flex; gap: 6px; }
+.cam .camtools button { background: rgba(16, 22, 20, 0.72); border: 1px solid rgba(241, 238, 228, 0.18); color: var(--chalk); border-radius: 999px; min-height: 36px; padding: 6px 12px; font-size: 14px; font-weight: 600; backdrop-filter: blur(6px); }
+.cam .msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; color: var(--chalk-dim); }
+.cam .msg div { max-width: 36ch; display: grid; gap: 12px; justify-items: center; }
+.loupe { position: absolute; width: 132px; height: 132px; border-radius: 50%; border: 3px solid var(--sisal); overflow: hidden; pointer-events: none; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+.loupe canvas { width: 100%; height: 100%; display: block; }
+
+.calib { background: var(--slate-2); border: 1px solid var(--slate-3); border-radius: 12px; padding: 14px; display: grid; gap: 12px; grid-template-columns: 76px 1fr; align-items: center; }
+.calib svg { width: 76px; height: 76px; }
+.calib h2 { margin: 0; font-size: 18px; line-height: 1.25; text-wrap: balance; }
+.calib .steps { display: flex; gap: 6px; margin-bottom: 4px; }
+.calib .steps i { width: 22px; height: 4px; border-radius: 2px; background: var(--slate-3); }
+.calib .steps i.on { background: var(--sisal); }
+.calib .row { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.calib .row .btn { flex: 1 1 auto; }
+.warnline { grid-column: 1 / -1; color: var(--sisal); font-size: 14px; }
+
+.board-panel { display: grid; gap: 10px; align-content: start; min-width: 0; padding-bottom: 8px; }
+.scores { display: grid; gap: 10px; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
+.pl {
+  position: relative; background: var(--slate-2); border: 1px solid var(--slate-3); border-radius: 14px;
+  padding: 12px 14px 12px; display: grid; gap: 2px; min-width: 0; transition: border-color 0.2s, background 0.2s;
+}
+.pl.active { border-color: var(--sisal); background: linear-gradient(180deg, rgba(232, 212, 160, 0.10), rgba(232, 212, 160, 0.02)); }
+.pl .head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pl .name { font-weight: 700; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl.active .name::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--sisal); margin-right: 8px; vertical-align: middle; }
+.pl .legs { margin-left: auto; display: flex; gap: 4px; }
+.pl .legs i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--chalk-dim); }
+.pl .legs i.won { background: var(--green); border-color: var(--green); }
+.pl .rem { font-family: var(--font-score); font-weight: 800; font-size: clamp(56px, 17vw, 112px); line-height: 0.95; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.scores[data-n="3"] .pl .rem, .scores[data-n="4"] .pl .rem { font-size: clamp(44px, 12vw, 84px); }
+.pl .co { font-family: var(--font-score); font-weight: 600; font-size: 20px; color: var(--green); letter-spacing: 0.04em; min-height: 26px; }
+.pl .co.none { color: var(--chalk-dim); font-size: 16px; }
+.pl .meta { display: flex; gap: 12px; color: var(--chalk-dim); font-size: 14px; font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.pl .chalk { display: flex; gap: 10px; flex-wrap: wrap; font-family: var(--font-score); font-weight: 600; font-size: 18px; color: var(--chalk-dim); min-height: 22px; }
+.pl .chalk s { text-decoration-thickness: 2px; text-decoration-color: rgba(241, 238, 228, 0.55); }
+
+.turn { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 8px; align-items: stretch; }
+.dart {
+  border: 1px solid var(--slate-3); background: var(--slate-2); border-radius: 12px; min-height: 64px; padding: 6px 4px;
+  display: grid; place-items: center; align-content: center; gap: 0; text-align: center;
+}
+.dart b { font-family: var(--font-score); font-weight: 800; font-size: 30px; line-height: 1; }
+.dart small { font-size: 12px; color: var(--chalk-dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.dart.filled { background: var(--chalk); color: var(--ink); border-color: var(--chalk); }
+.dart.filled small { color: #4d5852; }
+.dart.check { box-shadow: inset 0 0 0 3px var(--sisal); }
+.dart.flash { animation: flash 0.7s ease-out; }
+@keyframes flash { 0% { background: var(--green); border-color: var(--green); } }
+.turn .total { min-width: 84px; display: grid; place-items: center; align-content: center; border-radius: 12px; padding: 4px 10px; }
+.turn .total b { font-family: var(--font-score); font-weight: 900; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }
+.turn .total small { font-size: 12px; color: var(--chalk-dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.turn .total.bust b { color: var(--red); }
+.turnlabel { display: flex; justify-content: space-between; gap: 8px; color: var(--chalk-dim); font-size: 13px; letter-spacing: 0.04em; }
+
+.log { display: grid; border-top: 1px solid var(--slate-3); }
+.log:empty { display: none; }
+.log button {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 48px 48px; gap: 10px; align-items: baseline;
+  padding: 9px 4px; min-height: 44px; border: 0; border-bottom: 1px solid var(--slate-3); background: transparent; text-align: left;
+}
+.log .who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log .ds { color: var(--chalk-dim); font-size: 14px; font-variant-numeric: tabular-nums; }
+.log .tt { font-family: var(--font-score); font-weight: 800; font-size: 20px; text-align: right; font-variant-numeric: tabular-nums; }
+.log .tt.bust { color: var(--red); font-size: 16px; }
+.log .rm { color: var(--chalk-dim); text-align: right; font-variant-numeric: tabular-nums; }
+.log button.focus { background: rgba(232, 212, 160, 0.09); }
+.turnlabel button { border: 0; background: transparent; color: var(--sisal); font-weight: 600; padding: 0; min-height: 24px; }
+.actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding-block: 8px 10px; }
+.actions .btn { padding: 10px 6px; font-size: 15px; }
+
+/* manual mode: no camera window */
+#game.manual .camcol { display: none; }
+
+/* landscape: camera left, scores right */
+@media (orientation: landscape) and (min-width: 700px) {
+  .stage { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); grid-template-rows: auto; gap: 14px; }
+  .camcol { display: grid; gap: 10px; align-content: start; min-height: 0; }
+  .cam, .cam.big { max-height: calc(100vh - 150px); }
+  #game.calibrating .stage { grid-template-columns: 1fr; }
+  #game.calibrating .camcol { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
+  #game.manual .stage { grid-template-columns: 1fr; }
+  .pl .rem { font-size: clamp(56px, 9vw, 120px); }
+}
+.camcol { display: grid; gap: 10px; min-height: 0; }
+
+/* ---------- sheets ---------- */
+.scrim { position: fixed; inset: 0; background: rgba(5, 8, 7, 0.55); z-index: 40; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--slate-2); border-top: 1px solid var(--slate-3);
+  border-radius: 18px 18px 0 0; padding-top: 10px; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  max-height: 88vh; overflow-y: auto; box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+}
+.sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--slate-3); margin: 0 auto 10px; }
+.sheet h3 { margin: 0; font-size: 18px; }
+.sheet .inner { max-width: 640px; margin: 0 auto; display: grid; gap: 12px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mults { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mults button { min-height: 48px; border-radius: 10px; border: 1px solid var(--slate-3); background: var(--slate); font-weight: 700; font-size: 16px; }
+.mults button[aria-pressed="true"][data-m="1"] { background: var(--chalk); color: var(--ink); }
+.mults button[aria-pressed="true"][data-m="2"] { background: var(--green); color: var(--ink); border-color: var(--green); }
+.mults button[aria-pressed="true"][data-m="3"] { background: var(--red); color: var(--ink); border-color: var(--red); }
+.nums { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.nums button, .specials button {
+  min-height: 50px; border-radius: 10px; border: 1px solid var(--slate-3); background: var(--slate);
+  font-family: var(--font-score); font-weight: 800; font-size: 24px;
+}
+.nums button:active, .specials button:active { background: var(--slate-3); }
+.specials { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.specials button { font-size: 20px; }
+.specials .del { color: var(--red); font-family: var(--font-ui); font-size: 16px; font-weight: 700; }
+.settings { display: grid; gap: 4px; }
+.settings label.block { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--slate-3); }
+.settings .lab { display: flex; justify-content: space-between; gap: 10px; font-weight: 600; }
+.settings .lab span { color: var(--chalk-dim); font-weight: 500; }
+.settings .row { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 8px; }
+.settings .row .btn { flex: 1 1 140px; }
+
+/* ---------- overlays ---------- */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); top: calc(12px + env(safe-area-inset-top, 0px)); z-index: 80;
+  background: var(--chalk); color: var(--ink); padding: 10px 16px; border-radius: 999px; font-weight: 600; max-width: calc(100% - 32px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); text-align: center;
+}
+.callout {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; pointer-events: none;
+}
+.callout b {
+  font-family: var(--font-score); font-weight: 900; font-size: clamp(90px, 30vw, 220px); line-height: 1; color: var(--chalk);
+  text-shadow: 0 6px 40px rgba(0, 0, 0, 0.6); animation: pop 1.3s ease-out forwards;
+}
+.callout b.bust { color: var(--red); }
+.callout b.ton { color: var(--sisal); }
+@keyframes pop { 0% { transform: scale(0.6); opacity: 0; } 15% { transform: scale(1.05); opacity: 1; } 70% { opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+.win { position: fixed; inset: 0; z-index: 70; background: rgba(9, 13, 12, 0.92); display: grid; place-items: center; text-align: center; }
+.win .box { display: grid; gap: 14px; justify-items: center; max-width: 520px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.win h2 { margin: 0; font-family: var(--font-score); font-weight: 900; font-size: clamp(64px, 18vw, 120px); line-height: 0.9; color: var(--green); }
+.win .who { font-size: 24px; font-weight: 700; }
+.win table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.win td, .win th { padding: 6px 12px; border-bottom: 1px solid var(--slate-3); text-align: right; }
+.win th { color: var(--chalk-dim); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; }
+.win td:first-child, .win th:first-child { text-align: left; }
+.win .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+
+<section id="setup" class="wrap" hidden>
+  <header class="brand">
+    <div>
+      <h1>Oche<span>Cam</span></h1>
+      <p>Prop your phone up facing the board. It reads each dart as it lands and keeps the 501 scores for you.</p>
+    </div>
+  </header>
+
+  <div class="card resume" id="resumeCard" hidden>
+    <div><div class="eyebrow">Game in progress</div><div id="resumeText"></div></div>
+    <button class="btn primary" id="resumeBtn" type="button">Resume</button>
+  </div>
+
+  <div class="setup-grid">
+    <div class="card">
+      <div class="eyebrow">Players</div>
+      <div class="players" id="playerList"></div>
+      <button class="btn ghost" id="addPlayer" type="button">Add player</button>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Game</div>
+      <div class="opt-row"><span>Start from</span>
+        <div class="seg" id="startSeg" role="group" aria-label="Starting score">
+          <button type="button" data-v="301" aria-pressed="false">301</button>
+          <button type="button" data-v="501" aria-pressed="true">501</button>
+          <button type="button" data-v="701" aria-pressed="false">701</button>
+        </div>
+      </div>
+      <div class="opt-row"><span>Finish</span>
+        <div class="seg" id="outSeg" role="group" aria-label="Finish rule">
+          <button type="button" data-v="double" aria-pressed="true">Double out</button>
+          <button type="button" data-v="straight" aria-pressed="false">Straight out</button>
+        </div>
+      </div>
+      <label class="switch" for="voiceOpt"><span>Call the scores out loud</span><input type="checkbox" id="voiceOpt" checked></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow">Phone placement</div>
+    <div class="place">
+      <svg viewBox="0 0 120 120" role="img" aria-label="Side view: dartboard on the wall, phone below and in front, tilted up at the board">
+        <rect x="8" y="10" width="6" height="100" fill="#2a3833"/>
+        <rect x="14" y="30" width="7" height="40" rx="2" fill="#e8d4a0"/>
+        <line x1="21" y1="50" x2="88" y2="50" stroke="#9faba4" stroke-dasharray="3 4"/>
+        <text x="60" y="44" fill="#9faba4" font-size="9" font-family="sans-serif" text-anchor="middle">darts</text>
+        <rect x="70" y="86" width="22" height="12" rx="3" fill="#f1eee4" transform="rotate(-28 81 92)"/>
+        <line x1="76" y1="88" x2="22" y2="52" stroke="#46b077" stroke-width="1.5"/>
+        <line x1="76" y1="88" x2="22" y2="38" stroke="#46b077" stroke-width="1" opacity="0.5"/>
+        <line x1="76" y1="88" x2="22" y2="66" stroke="#46b077" stroke-width="1" opacity="0.5"/>
+        <rect x="66" y="98" width="30" height="12" fill="#2a3833"/>
+      </svg>
+      <ol>
+        <li><b>Off to one side or below</b>, about 1 m from the board, out of the line of fire.</li>
+        <li><b>At an angle</b> of roughly 20–45°, not straight on. Darts read best when you can see their length.</li>
+        <li><b>Fill the frame.</b> Get close or zoom so the board is large. Keep the phone dead still.</li>
+        <li><b>Even light</b> with soft shadows. A ring light around the board is ideal.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="start-row">
+    <button class="btn primary" id="startCam" type="button">Start with camera</button>
+    <button class="btn" id="startManual" type="button">Score by tapping</button>
+  </div>
+</section>
+
+<section id="game" class="wrap" hidden>
+  <div class="topbar">
+    <div class="logo">Oche<span>Cam</span></div>
+    <div class="chip" id="status" data-tone="idle" role="status"><i></i><span>Ready</span></div>
+    <button class="iconbtn" id="menuBtn" type="button" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+
+  <div class="stage">
+    <div class="camcol">
+      <div class="cam" id="cam">
+        <video id="video" playsinline muted autoplay></video>
+        <canvas class="ov" id="overlay"></canvas>
+        <div class="camtools">
+          <button type="button" id="calibBtn">Line up board</button>
+          <button type="button" id="sizeBtn">Bigger</button>
+        </div>
+        <div class="msg" id="camMsg" hidden><div><span id="camMsgText"></span><button class="btn" id="camMsgBtn" type="button" hidden></button></div></div>
+        <div class="loupe" id="loupe" hidden><canvas id="loupeCanvas" width="264" height="264"></canvas></div>
+      </div>
+      <div class="calib" id="calib" hidden>
+        <svg viewBox="-100 -100 200 200" id="calibDiagram" aria-hidden="true"></svg>
+        <div>
+          <div class="steps" id="calibSteps"><i></i><i></i><i></i><i></i></div>
+          <h2 id="calibTitle">Line up the board</h2>
+          <div class="hint" id="calibHint"></div>
+        </div>
+        <div class="warnline" id="calibWarn" hidden></div>
+        <div class="row">
+          <button class="btn" id="autoBtn" type="button">Find board automatically</button>
+          <button class="btn ghost" id="calibReset" type="button">Start over</button>
+          <button class="btn primary" id="calibDone" type="button" disabled>Done</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="board-panel">
+      <div class="scores" id="scores"></div>
+      <div>
+        <div class="turnlabel"><span id="turnWho">This turn</span><span id="turnNote"></span></div>
+        <div class="turn" id="turn">
+          <button class="dart" type="button" data-i="0"><b>–</b><small>Dart 1</small></button>
+          <button class="dart" type="button" data-i="1"><b>–</b><small>Dart 2</small></button>
+          <button class="dart" type="button" data-i="2"><b>–</b><small>Dart 3</small></button>
+          <div class="total" id="turnTotal"><b>0</b><small>Scored</small></div>
+        </div>
+      </div>
+      <div class="log" id="log" aria-label="Turns this leg"></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="undoBtn" type="button">Undo</button>
+    <button class="btn" id="missBtn" type="button">Miss</button>
+    <button class="btn" id="padBtn" type="button">Keypad</button>
+    <button class="btn primary" id="nextBtn" type="button">Next</button>
+  </div>
+</section>
+
+<div class="scrim" id="scrim" hidden></div>
+
+<div class="sheet wrap" id="pad" hidden role="dialog" aria-label="Enter a dart">
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3 id="padTitle">Enter dart</h3><button class="btn ghost" type="button" data-close>Close</button></div>
+    <div class="mults" id="mults">
+      <button type="button" data-m="1" aria-pressed="true">Single</button>
+      <button type="button" data-m="2" aria-pressed="false">Double</button>
+      <button type="button" data-m="3" aria-pressed="false">Treble</button>
+    </div>
+    <div class="nums" id="nums"></div>
+    <div class="specials">
+      <button type="button" data-s="25">25</button>
+      <button type="button" data-s="bull">Bull</button>
+      <button type="button" data-s="miss">Miss</button>
+      <button type="button" data-s="del" class="del" id="padDel">Remove</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet wrap" id="settings" hidden role="dialog" aria-label="Settings">
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Settings</h3><button class="btn ghost" type="button" data-close>Close</button></div>
+    <div class="settings">
+      <label class="block" for="sens"><span class="lab">Detection sensitivity <span id="sensVal"></span></span>
+        <input type="range" id="sens" min="12" max="48" step="1"></label>
+      <label class="block" for="tipLen"><span class="lab">Hidden point length <span id="tipVal"></span></span>
+        <input type="range" id="tipLen" min="0" max="30" step="1">
+        <span class="hint">If detected darts land a little short of where they really are, raise this. If they overshoot, lower it.</span></label>
+      <label class="switch" for="shadowOpt"><span>Ignore shadows</span><input type="checkbox" id="shadowOpt"></label>
+      <label class="switch" for="debugOpt"><span>Show what the camera detects</span><input type="checkbox" id="debugOpt"></label>
+      <label class="switch" for="voiceOpt2"><span>Call the scores out loud</span><input type="checkbox" id="voiceOpt2"></label>
+      <label class="block" for="zoom" id="zoomRow" hidden><span class="lab">Camera zoom <span id="zoomVal"></span></span>
+        <input type="range" id="zoom" min="1" max="4" step="0.1"></label>
+      <div class="row">
+        <button class="btn" type="button" id="recalBtn">Line up board again</button>
+        <button class="btn" type="button" id="camToggle">Turn camera off</button>
+      </div>
+      <div class="row">
+        <button class="btn danger" type="button" id="newGameBtn">New game</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="callout" id="callout" hidden><b></b></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<div class="win" id="win" hidden>
+  <div class="box">
+    <div class="eyebrow" id="winLeg">Leg 1</div>
+    <h2>Game shot</h2>
+    <div class="who" id="winWho"></div>
+    <table id="winTable"></table>
+    <div class="row">
+      <button class="btn" type="button" id="winUndo">Undo last dart</button>
+      <button class="btn primary" type="button" id="winNext">Next leg</button>
+    </div>
+  </div>
+</div>
+
+<script>/* DartCV — dartboard geometry, homography, camera model, change detection,
+   dart-tip estimation, automatic board finding, and a turn-aware tracker.
+   Board coordinates are millimetres, origin at the bull, x right, y up. */
+(function (root) {
+'use strict';
+
+const RINGS = { bullIn: 6.35, bullOut: 15.9, trebIn: 99, trebOut: 107, dblIn: 162, dblOut: 170, edge: 225.5 };
+const ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+// Calibration targets: outer edge of the double ring, in the middle of 20, 6, 3 and 11.
+const CAL_POINTS = [
+  { seg: 20, x: 0, y: 170 }, { seg: 6, x: 170, y: 0 },
+  { seg: 3, x: 0, y: -170 }, { seg: 11, x: -170, y: 0 },
+];
+
+/* ---------- scoring ---------- */
+function segAngle(x, y) { // degrees clockwise from the top
+  let phi = 90 - Math.atan2(y, x) * 180 / Math.PI;
+  return ((phi % 360) + 360) % 360;
+}
+function scoreAt(x, y) {
+  const r = Math.hypot(x, y);
+  if (r <= RINGS.bullIn) return { seg: 25, mult: 2, r };
+  if (r <= RINGS.bullOut) return { seg: 25, mult: 1, r };
+  if (r > RINGS.dblOut) return { seg: 0, mult: 0, r };
+  const idx = Math.floor(((segAngle(x, y) + 9) % 360) / 18);
+  let mult = 1;
+  if (r >= RINGS.trebIn && r <= RINGS.trebOut) mult = 3;
+  else if (r >= RINGS.dblIn) mult = 2;
+  return { seg: ORDER[idx], mult, r };
+}
+// Distance in mm to the nearest wire. Small values mean "close call".
+function wireDistance(x, y) {
+  const r = Math.hypot(x, y);
+  let d = Infinity;
+  for (const v of [RINGS.bullIn, RINGS.bullOut, RINGS.trebIn, RINGS.trebOut, RINGS.dblIn, RINGS.dblOut]) d = Math.min(d, Math.abs(r - v));
+  if (r > RINGS.bullOut && r < RINGS.dblOut + 3) {
+    const off = (segAngle(x, y) + 9) % 18;
+    d = Math.min(d, Math.min(off, 18 - off) * Math.PI / 180 * r);
+  }
+  return d;
+}
+
+/* ---------- 3x3 linear algebra (row-major flat arrays) ---------- */
+function apply(H, x, y) {
+  const w = H[6] * x + H[7] * y + H[8];
+  return [(H[0] * x + H[1] * y + H[2]) / w, (H[3] * x + H[4] * y + H[5]) / w];
+}
+function mul3(A, B) {
+  const C = new Array(9);
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+    C[i * 3 + j] = A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j];
+  return C;
+}
+function inv3(m) {
+  const [a, b, c, d, e, f, g, h, i] = m;
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+  const det = a * A + b * B + c * C;
+  if (!det) return null;
+  const s = 1 / det;
+  return [A * s, -(b * i - c * h) * s, (b * f - c * e) * s,
+          B * s, (a * i - c * g) * s, -(a * f - c * d) * s,
+          C * s, -(a * h - b * g) * s, (a * e - b * d) * s];
+}
+function solveLinear(A, b) { // Gaussian elimination, partial pivoting. A is n×n (array of rows)
+  const n = b.length;
+  const M = A.map((row, i) => row.concat([b[i]]));
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-12) return null;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = c + 1; r < n; r++) {
+      const f = M[r][c] / M[c][c];
+      if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+    }
+  }
+  const x = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) {
+    let s = M[r][n];
+    for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k];
+    x[r] = s / M[r][r];
+  }
+  return x;
+}
+function normT(pts) {
+  let cx = 0, cy = 0;
+  for (const p of pts) { cx += p[0]; cy += p[1]; }
+  cx /= pts.length; cy /= pts.length;
+  let d = 0;
+  for (const p of pts) d += Math.hypot(p[0] - cx, p[1] - cy);
+  const s = Math.SQRT2 / ((d / pts.length) || 1);
+  return [s, 0, -s * cx, 0, s, -s * cy, 0, 0, 1];
+}
+// Least-squares DLT homography mapping src -> dst (n >= 4 point pairs).
+function homography(src, dst) {
+  const Ts = normT(src), Td = normT(dst);
+  const AtA = Array.from({ length: 8 }, () => new Array(8).fill(0));
+  const Atb = new Array(8).fill(0);
+  for (let i = 0; i < src.length; i++) {
+    const [x, y] = apply(Ts, src[i][0], src[i][1]);
+    const [u, v] = apply(Td, dst[i][0], dst[i][1]);
+    const rows = [[x, y, 1, 0, 0, 0, -u * x, -u * y, u], [0, 0, 0, x, y, 1, -v * x, -v * y, v]];
+    for (const r of rows) for (let a = 0; a < 8; a++) {
+      Atb[a] += r[a] * r[8];
+      for (let b = 0; b < 8; b++) AtA[a][b] += r[a] * r[b];
+    }
+  }
+  const h = solveLinear(AtA, Atb);
+  if (!h) return null;
+  const Tdi = inv3(Td);
+  const H = mul3(Tdi, mul3(h.concat([1]), Ts));
+  return H.map(v => v / H[8]);
+}
+function homographyFromCal(imgPts) {
+  return homography(CAL_POINTS.map(p => [p.x, p.y]), imgPts);
+}
+
+/* ---------- camera model (focal length + pose from the board homography) ---------- */
+const v3 = {
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  norm: a => Math.hypot(a[0], a[1], a[2]),
+};
+function cameraModel(H, W, Hh) {
+  const cx = W / 2, cy = Hh / 2, big = Math.max(W, Hh);
+  const P = [H[0] - cx * H[6], H[1] - cx * H[7], H[2] - cx * H[8],
+             H[3] - cy * H[6], H[4] - cy * H[7], H[5] - cy * H[8],
+             H[6], H[7], H[8]];
+  const A1 = P[0] * P[1] + P[3] * P[4], b1 = P[6] * P[7];
+  const A2 = P[0] * P[0] + P[3] * P[3] - P[1] * P[1] - P[4] * P[4], b2 = P[6] * P[6] - P[7] * P[7];
+  const den = A1 * A1 + A2 * A2;
+  const a = den > 0 ? -(A1 * b1 + A2 * b2) / den : -1;
+  let f = a > 0 ? 1 / Math.sqrt(a) : NaN, fEstimated = true;
+  if (!(f > 0.45 * big && f < 2.6 * big)) { f = 0.8 * big; fEstimated = false; }
+  const m1 = [P[0] / f, P[3] / f, P[6]], m2 = [P[1] / f, P[4] / f, P[7]], m3 = [P[2] / f, P[5] / f, P[8]];
+  let s = 2 / (v3.norm(m1) + v3.norm(m2));
+  if (m3[2] * s < 0) s = -s;
+  const r1 = m1.map(v => v * s), r2 = m2.map(v => v * s), t = m3.map(v => v * s);
+  let r3 = v3.cross(r1, r2);
+  const n3 = v3.norm(r3) || 1;
+  r3 = r3.map(v => v / n3);
+  const C = [-v3.dot(r1, t), -v3.dot(r2, t), -v3.dot(r3, t)];
+  if (C[2] < 0) { r3 = r3.map(v => -v); C[2] = -C[2]; }
+  const kr3 = [f * r3[0], f * r3[1], r3[2]];
+  const zc = [(kr3[0] + cx * kr3[2]) / s, (kr3[1] + cy * kr3[2]) / s, kr3[2] / s];
+  // Viewing angle between the board normal and the line to the camera
+  const angle = Math.acos(Math.min(1, C[2] / v3.norm(C))) * 180 / Math.PI;
+  return { f, fEstimated, C, zc, angle };
+}
+function project3(H, zc, X, Y, Z) {
+  const w = H[6] * X + H[7] * Y + H[8] + zc[2] * Z;
+  return [(H[0] * X + H[1] * Y + H[2] + zc[0] * Z) / w, (H[3] * X + H[4] * Y + H[5] + zc[1] * Z) / w];
+}
+
+/* ---------- model: everything precomputed for one calibration ---------- */
+function computeROI(H, vw, vh, radius, maxDim) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let k = 0; k < 72; k++) {
+    const a = k * Math.PI / 36;
+    const [u, v] = apply(H, radius * Math.cos(a), radius * Math.sin(a));
+    x0 = Math.min(x0, u); y0 = Math.min(y0, v); x1 = Math.max(x1, u); y1 = Math.max(y1, v);
+  }
+  const sx = Math.max(0, Math.floor(x0)), sy = Math.max(0, Math.floor(y0));
+  const ex = Math.min(vw, Math.ceil(x1)), ey = Math.min(vh, Math.ceil(y1));
+  const sw = Math.max(16, ex - sx), sh = Math.max(16, ey - sy);
+  const scale = Math.min(1, maxDim / Math.max(sw, sh));
+  return { sx, sy, sw, sh, scale, dw: Math.max(8, Math.round(sw * scale)), dh: Math.max(8, Math.round(sh * scale)) };
+}
+function buildModel(H, vw, vh, opts = {}) {
+  const Hinv = inv3(H);
+  const cam = cameraModel(H, vw, vh);
+  const roi = computeROI(H, vw, vh, opts.roiRadius || 290, opts.maxDim || 640);
+  const c = apply(H, 0, 0);
+  let acc = 0;
+  for (let k = 0; k < 16; k++) {
+    const p = apply(H, 170 * Math.cos(k * Math.PI / 8), 170 * Math.sin(k * Math.PI / 8));
+    acc += Math.hypot(p[0] - c[0], p[1] - c[1]);
+  }
+  const pxPerMM = acc / 16 / 170 * roi.scale;
+  const { dw, dh, sx, sy, scale } = roi;
+  const rmap = new Float32Array(dw * dh);
+  for (let y = 0; y < dh; y++) for (let x = 0; x < dw; x++) {
+    const [bx, by] = apply(Hinv, sx + (x + 0.5) / scale, sy + (y + 0.5) / scale);
+    rmap[y * dw + x] = Math.hypot(bx, by);
+  }
+  return { H, Hinv, cam, roi, pxPerMM, rmap, vw, vh };
+}
+function roiToVideo(m, px, py) { return [m.roi.sx + (px + 0.5) / m.roi.scale, m.roi.sy + (py + 0.5) / m.roi.scale]; }
+function roiToBoard(m, px, py) { const v = roiToVideo(m, px, py); return apply(m.Hinv, v[0], v[1]); }
+// Expected on-screen vector (ROI px) from a tip at this pixel to a typical dart's tail.
+function expectedDartVector(m, px, py, tiltDeg = 10, L = 110) {
+  const [bx, by] = roiToBoard(m, px, py);
+  const a = tiltDeg * Math.PI / 180;
+  const p0 = project3(m.H, m.cam.zc, bx, by, 0);
+  const p1 = project3(m.H, m.cam.zc, bx, by + L * Math.sin(a), L * Math.cos(a));
+  return [(p1[0] - p0[0]) * m.roi.scale, (p1[1] - p0[1]) * m.roi.scale];
+}
+
+/* ---------- change detection ---------- */
+const DEFAULTS = {
+  threshold: 24,        // min colour difference (0-255) counted as change
+  shadows: true,        // suppress shadow-like darkening
+  shadowChroma: 0.035,
+  tipOffsetMM: 18,      // steel point length from barrel to board, along the dart
+  maxR: 300,            // ignore change beyond this radius (mm)
+  minDartMM2: 45, maxDartMM2: 6500,
+  bigChangeMM2: 14000,  // more than this = board blocked / view changed
+  settleFrames: 5,
+  motionOn: 0.0007,     // fraction of ROI samples moving
+  bigMotion: 0.03,
+};
+
+function gains(cur, ref, rmap, maxR) {
+  let c0 = 0, c1 = 0, c2 = 0, r0 = 0, r1 = 0, r2 = 0;
+  for (let i = 0, n = rmap.length; i < n; i += 3) {
+    if (rmap[i] > maxR) continue;
+    const j = i << 2;
+    c0 += cur[j]; c1 += cur[j + 1]; c2 += cur[j + 2];
+    r0 += ref[j]; r1 += ref[j + 1]; r2 += ref[j + 2];
+  }
+  const clamp = v => (isFinite(v) && v > 0 ? Math.min(1.6, Math.max(0.6, v)) : 1);
+  return [clamp(c0 / r0), clamp(c1 / r1), clamp(c2 / r2)];
+}
+// Per-pixel change strength (0-255) between cur and ref, with exposure and shadow compensation.
+function changeMap(cur, ref, m, o) {
+  const rmap = m.rmap, N = rmap.length, d = new Uint8Array(N), sh = new Uint8Array(N);
+  const g = gains(cur, ref, rmap, 200);
+  const shadows = o.shadows, sc = o.shadowChroma, maxR = o.maxR;
+  for (let i = 0; i < N; i++) {
+    if (rmap[i] > maxR) continue;
+    const j = i << 2;
+    const R0 = ref[j] * g[0], G0 = ref[j + 1] * g[1], B0 = ref[j + 2] * g[2];
+    const R1 = cur[j], G1 = cur[j + 1], B1 = cur[j + 2];
+    const dr = R1 - R0, dg = G1 - G0, db = B1 - B0;
+    let v = Math.max(dr < 0 ? -dr : dr, dg < 0 ? -dg : dg, db < 0 ? -db : db);
+    if (shadows && dr < 0 && dg < 0 && db < 0) {
+      const s0 = R0 + G0 + B0, s1 = R1 + G1 + B1;
+      if (s0 > 90 && s1 > 12) {
+        const ratio = s1 / s0;
+        if (ratio > 0.22 && ratio < 0.94) {
+          const cd = Math.abs(R1 / s1 - R0 / s0) + Math.abs(G1 / s1 - G0 / s0) + Math.abs(B1 / s1 - B0 / s0);
+          if (cd < sc) { v *= 0.25; sh[i] = 1; }
+        }
+      }
+    }
+    d[i] = v > 255 ? 255 : v;
+  }
+  d.shadow = sh;
+  return d;
+}
+function medianSample(d, rmap, maxR) {
+  const hist = new Uint32Array(256);
+  let n = 0;
+  for (let i = 0; i < d.length; i += 7) if (rmap[i] <= maxR) { hist[d[i]]++; n++; }
+  let acc = 0;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n / 2) return v; }
+  return 0;
+}
+function maskFrom(d, w, h, T) {
+  const N = w * h, m0 = new Uint8Array(N), m = new Uint8Array(N);
+  for (let i = 0; i < N; i++) if (d[i] > T) m0[i] = 1;
+  let count = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    if (!m0[i]) continue;
+    const nb = m0[i - 1] + m0[i + 1] + m0[i - w] + m0[i + w] + m0[i - w - 1] + m0[i - w + 1] + m0[i + w - 1] + m0[i + w + 1];
+    if (nb >= 2) { m[i] = 1; count++; }
+  }
+  return { mask: m, count };
+}
+function dilate(m, w, h, r) {
+  const t = new Uint8Array(w * h), o = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    let run = -1e9;
+    for (let x = 0; x < w; x++) { if (m[y * w + x]) run = x; if (x - run <= r) t[y * w + x] = 1; }
+    run = 1e9;
+    for (let x = w - 1; x >= 0; x--) { if (m[y * w + x]) run = x; if (run - x <= r) t[y * w + x] = 1; }
+  }
+  for (let x = 0; x < w; x++) {
+    let run = -1e9;
+    for (let y = 0; y < h; y++) { if (t[y * w + x]) run = y; if (y - run <= r) o[y * w + x] = 1; }
+    run = 1e9;
+    for (let y = h - 1; y >= 0; y--) { if (t[y * w + x]) run = y; if (run - y <= r) o[y * w + x] = 1; }
+  }
+  return o;
+}
+// Connected components of the gap-bridged mask; each blob keeps only real mask pixels.
+function blobs(mask, w, h, bridge) {
+  const md = bridge ? dilate(mask, w, h, bridge) : mask;
+  const lab = new Int32Array(w * h).fill(-1), q = new Int32Array(w * h);
+  const out = [];
+  for (let s = 0; s < w * h; s++) {
+    if (!md[s] || lab[s] >= 0) continue;
+    const id = out.length;
+    let qh = 0, qt = 0;
+    q[qt++] = s; lab[s] = id;
+    const px = [];
+    while (qh < qt) {
+      const i = q[qh++];
+      if (mask[i]) px.push(i);
+      const x = i % w, y = (i - x) / w;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (md[j] && lab[j] < 0) { lab[j] = id; q[qt++] = j; }
+      }
+    }
+    if (px.length) out.push({ px: Int32Array.from(px), area: px.length });
+  }
+  return out;
+}
+
+/* ---------- dart tip ---------- */
+function blobStats(px, w) {
+  let sx = 0, sy = 0;
+  const n = px.length;
+  for (let k = 0; k < n; k++) { const i = px[k]; sx += i % w; sy += (i / w) | 0; }
+  return { cx: sx / n, cy: sy / n };
+}
+// Average position of the pixels at the extreme end of direction (ux,uy), optionally within a lateral corridor.
+function extremeAlong(px, w, ox, oy, ux, uy, band, corridor) {
+  let best = -Infinity;
+  const n = px.length, p = new Float32Array(n), q = new Float32Array(n);
+  for (let k = 0; k < n; k++) {
+    const i = px[k], x = i % w - ox, y = ((i / w) | 0) - oy;
+    p[k] = x * ux + y * uy; q[k] = -x * uy + y * ux;
+    if ((corridor == null || Math.abs(q[k]) <= corridor) && p[k] > best) best = p[k];
+  }
+  // robust: ignore a lone outlier pixel by requiring 2+ pixels near the extreme
+  let tx = 0, ty = 0, c = 0;
+  for (let k = 0; k < n; k++) {
+    if (corridor != null && Math.abs(q[k]) > corridor) continue;
+    if (p[k] >= best - band) { const i = px[k]; tx += i % w; ty += (i / w) | 0; c++; }
+  }
+  if (!c) return null;
+  return { x: tx / c, y: ty / c, reach: best };
+}
+function estimateTip(blob, m, o, d, T) {
+  const w = m.roi.dw, h = m.roi.dh, px = blob.px;
+  const { cx, cy } = blobStats(px, w);
+  const [ex, ey] = expectedDartVector(m, cx, cy);
+  const eLen = Math.hypot(ex, ey) || 1e-6;
+  const pxPerMMalong = eLen / 110;
+  // 1) extreme of the blob opposite the expected tail direction
+  let ux = -ex / eLen, uy = -ey / eLen;
+  let method = 'geometry';
+  if (eLen < 3) { ux = 0; uy = 1; method = 'headon'; }
+  const band = 1.5;
+  let ext = extremeAlong(px, w, cx, cy, ux, uy, band, null);
+  let tipX = ext.x, tipY = ext.y;
+  // 2) refine the axis: from the blob's mass (flight end) toward that extreme
+  const dx = tipX - cx, dy = tipY - cy, dl = Math.hypot(dx, dy);
+  if (dl > 4 && (dx * ux + dy * uy) / dl > 0.2) {
+    ux = dx / dl; uy = dy / dl;
+    const ext2 = extremeAlong(px, w, cx, cy, ux, uy, band, Math.max(2.5, 4 * m.pxPerMM));
+    if (ext2) { tipX = ext2.x; tipY = ext2.y; }
+  }
+  // 3) walk down the faint steel point with a lower threshold
+  let walked = 0;
+  if (d) {
+    const lo = T * 0.6, shf = d.shadow;
+    const maxWalk = Math.max(2, 30 * pxPerMMalong);
+    let gap = 0;
+    for (let s = 0.5; s <= maxWalk; s += 0.5) {
+      const x = tipX + ux * s, y = tipY + uy * s;
+      let v = 0;
+      for (let k = -1; k <= 1; k++) {
+        const xi = Math.round(x - uy * k), yi = Math.round(y + ux * k);
+        if (xi < 0 || yi < 0 || xi >= w || yi >= h) continue;
+        const ii = yi * w + xi;
+        if (!(shf && shf[ii])) v = Math.max(v, d[ii]);
+      }
+      if (v >= lo) { walked = s; gap = 0; } else if ((gap += 0.5) > 1.5) break;
+    }
+  }
+  const walkedMM = walked / Math.max(pxPerMMalong, 1e-3);
+  tipX += ux * walked; tipY += uy * walked;
+  // 4) is the visible end the thin steel point or the wider barrel? Compare with the body further up.
+  let widthPx = 0, bodyPx = 0, isPoint = false;
+  if (d) {
+    const lo = T * 0.5, shf = d.shadow;
+    const widthAt = (x0, y0) => {
+      let wpx = 0;
+      for (const sgn of [-1, 1]) {
+        let gap = 0;
+        for (let k = sgn > 0 ? 0 : 1; k <= 14; k++) {
+          const xi = Math.round(x0 - uy * k * sgn), yi = Math.round(y0 + ux * k * sgn);
+          if (xi < 0 || yi < 0 || xi >= w || yi >= h) break;
+          const ii = yi * w + xi;
+          if (d[ii] >= lo && !(shf && shf[ii])) { wpx++; gap = 0; } else if (++gap > 1) break;
+        }
+      }
+      return wpx;
+    };
+    const med3 = a => a.sort((p, q) => p - q)[1];
+    widthPx = med3([1.5, 3, 4.5].map(b => widthAt(tipX - ux * b, tipY - uy * b)));
+    const body = [];
+    for (let mmBack = 30; mmBack <= 55; mmBack += 5) {
+      const b = mmBack * pxPerMMalong;
+      if (b < 6) continue;
+      body.push(med3([-1, 0, 1].map(o => widthAt(tipX - ux * (b + o), tipY - uy * (b + o)))));
+    }
+    body.sort((p, q) => p - q);
+    bodyPx = body.length ? body[Math.floor(body.length * 0.75)] : 0;
+    isPoint = bodyPx >= 3 ? widthPx <= Math.max(2.5, 0.62 * bodyPx) : widthPx <= Math.max(3, 4.2 * m.pxPerMM);
+  }
+  const extMM = isPoint ? -2 : Math.max(1, o.tipOffsetMM - walkedMM); // -2: edge blur makes the visible end overshoot
+  tipX += ux * extMM * pxPerMMalong; tipY += uy * extMM * pxPerMMalong;
+  const [vx, vy] = roiToVideo(m, tipX, tipY);
+  const [bx, by] = apply(m.Hinv, vx, vy);
+  return { x: tipX, y: tipY, vx, vy, bx, by, method, axis: [-ux, -uy], centroid: [cx, cy], walkedMM, eLen, isPoint, widthPx, bodyPx };
+}
+
+// Merge blobs that sit along the expected dart line of the main blob (shaft gaps, split flights).
+function mergeAlongDart(main, others, m, mm2) {
+  const w = m.roi.dw;
+  const { cx, cy } = blobStats(main.px, w);
+  const [ex, ey] = expectedDartVector(m, cx, cy);
+  const eLen = Math.hypot(ex, ey);
+  const reach = Math.max(6, 1.3 * eLen);
+  const merged = [main];
+  for (const b of others) {
+    if (b === main || b.used || b.mm2 < 4) continue;
+    const s = blobStats(b.px, w);
+    const vx = s.cx - cx, vy = s.cy - cy, dist = Math.hypot(vx, vy);
+    if (dist > reach) continue;
+    // must lie roughly along the dart axis (either side: the flight may be the smaller piece)
+    const along = Math.abs(vx * ex + vy * ey) / (eLen * dist + 1e-6);
+    if (dist < 4 * m.pxPerMM || along > 0.75) { merged.push(b); b.used = true; }
+  }
+  if (merged.length === 1) return main;
+  const all = new Int32Array(merged.reduce((a, b) => a + b.px.length, 0));
+  let o = 0;
+  for (const b of merged) { all.set(b.px, o); o += b.px.length; }
+  return { px: all, area: all.length, mm2: all.length * mm2, parts: merged.length };
+}
+
+// Compare a frame to a reference and return candidate darts.
+function analyze(cur, ref, m, opts) {
+  const o = Object.assign({}, DEFAULTS, opts);
+  const { dw: w, dh: h } = m.roi;
+  const d = changeMap(cur, ref, m, o);
+  const med = medianSample(d, m.rmap, 200);
+  const T = Math.max(o.threshold, med * 3 + 8);
+  const { mask, count } = maskFrom(d, w, h, T);
+  const mm2 = 1 / (m.pxPerMM * m.pxPerMM);
+  const changedMM2 = count * mm2;
+  const res = { changedMM2, threshold: T, mask, w, h, darts: [], blobs: [] };
+  if (changedMM2 > o.bigChangeMM2) { res.big = true; return res; }
+  const bl = blobs(mask, w, h, Math.max(2, Math.round(m.pxPerMM * 2.5)));
+  for (const b of bl) { b.mm2 = b.area * mm2; res.blobs.push(b); }
+  bl.sort((a, b) => b.area - a.area);
+  for (const b of bl) {
+    if (b.used || b.mm2 < o.minDartMM2 * 0.6) continue;
+    b.used = true;
+    const dart = mergeAlongDart(b, bl, m, mm2);
+    if (dart.mm2 < o.minDartMM2 || dart.mm2 > o.maxDartMM2) continue;
+    const tip = estimateTip(dart, m, o, d, T);
+    const r = Math.hypot(tip.bx, tip.by);
+    if (r > 240) continue;
+    const sc = scoreAt(tip.bx, tip.by);
+    res.darts.push({ seg: sc.seg, mult: sc.mult, tip, mm2: dart.mm2, wire: wireDistance(tip.bx, tip.by), blob: dart });
+  }
+  return res;
+}
+
+function motionFraction(a, b, m, T) {
+  const { dw: w, dh: h } = m.roi;
+  let c = 0, n = 0;
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+    const j = (y * w + x) << 2;
+    const v = Math.max(Math.abs(a[j] - b[j]), Math.abs(a[j + 1] - b[j + 1]), Math.abs(a[j + 2] - b[j + 2]));
+    if (v > T) c++;
+    n++;
+  }
+  return c / n;
+}
+function motionNoise(a, b, m) {
+  const { dw: w, dh: h } = m.roi;
+  const hist = new Uint32Array(256);
+  let n = 0;
+  for (let y = 1; y < h; y += 5) for (let x = 1; x < w; x += 5) {
+    const j = (y * w + x) << 2;
+    hist[Math.min(255, Math.max(Math.abs(a[j] - b[j]), Math.abs(a[j + 1] - b[j + 1]), Math.abs(a[j + 2] - b[j + 2])))]++;
+    n++;
+  }
+  let acc = 0;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n / 2) return v; }
+  return 0;
+}
+
+/* ---------- tracker: turns a frame stream into dart / clear events ---------- */
+class Tracker {
+  constructor(opts) { this.opts = Object.assign({}, DEFAULTS, opts); this.model = null; this.expectClear = false; }
+  setOptions(o) { Object.assign(this.opts, o); }
+  setModel(model) { this.model = model; this.ref = null; this.tips = []; }
+  resetRefs(frame) {
+    this.ref = frame.slice(); this.emptyRef = frame.slice(); this.prev = frame.slice();
+    this.quiet = 0; this.moving = false; this.maxMotion = 0; this.tips = []; this.blocked = 0;
+    this.noise = this.noise || 4; this.expectClear = false; this.lastAnalysis = null;
+  }
+  process(frame, now) {
+    const ev = [];
+    if (!this.model) return ev;
+    if (!this.ref) { this.resetRefs(frame); ev.push({ type: 'ready' }); return ev; }
+    const Tm = Math.max(22, this.noise * 4 + 10);
+    const motion = motionFraction(frame, this.prev, this.model, Tm);
+    if (motion < this.opts.motionOn) this.noise = this.noise * 0.9 + motionNoise(frame, this.prev, this.model) * 0.1;
+    this.prev.set(frame);
+    this.lastMotion = motion;
+    if (motion > this.opts.motionOn) {
+      if (!this.moving) ev.push({ type: 'motion' });
+      this.moving = true; this.quiet = 0;
+      this.maxMotion = Math.max(this.maxMotion, motion);
+      return ev;
+    }
+    this.quiet++;
+    if (this.moving && this.quiet >= this.opts.settleFrames) {
+      this.moving = false;
+      const big = this.maxMotion > this.opts.bigMotion;
+      this.maxMotion = 0;
+      return ev.concat(this.settle(frame, big));
+    }
+    if (!this.moving && this.blocked && this.quiet % 8 === 0) return ev.concat(this.settle(frame, true));
+    if (!this.moving && !this.blocked && this.quiet % 45 === 0) this.refresh(frame);
+    return ev;
+  }
+  boardMatchesEmpty(frame) {
+    const e = analyze(frame, this.emptyRef, this.model, this.opts);
+    return { ok: !e.big && e.darts.length === 0 && e.changedMM2 < 1500, e };
+  }
+  settle(frame, big) {
+    const a = analyze(frame, this.ref, this.model, this.opts);
+    this.lastAnalysis = a;
+    if (big || this.expectClear) {
+      const { ok } = this.boardMatchesEmpty(frame);
+      if (ok || (big && this.expectClear)) {
+        this.ref = frame.slice(); this.emptyRef = frame.slice();
+        this.tips = []; this.expectClear = false; this.blocked = 0;
+        return [{ type: 'clear' }];
+      }
+    }
+    if (a.big) {
+      this.blocked = (this.blocked || 0) + 1;
+      if (this.blocked === 12) return [{ type: 'moved' }];
+      return this.blocked === 1 ? [{ type: 'blocked' }] : [];
+    }
+    const wasBlocked = this.blocked; this.blocked = 0;
+    if (big || wasBlocked) { this.ref = frame.slice(); return [{ type: 'absorbed' }]; }
+    if (this.expectClear) { this.ref = frame.slice(); return []; }
+    const remaining = this.remaining != null ? this.remaining : Math.max(0, 3 - this.tips.length);
+    const top = a.darts[0];
+    const out = [];
+    for (const d of a.darts) {
+      if (out.length >= remaining) break;
+      if (d !== top && d.mm2 < 0.4 * top.mm2) continue;
+      const near = this.tips.some(t => Math.hypot(t.bx - d.tip.bx, t.by - d.tip.by) < 10);
+      if (near && d !== top) continue;
+      out.push(d);
+    }
+    if (out.length) this.lastPair = [this.ref, frame];
+    this.ref = frame.slice();
+    for (const d of out) this.tips.push(d.tip);
+    return out.map(d => ({ type: 'dart', dart: { seg: d.seg, mult: d.mult }, tip: d.tip, wire: d.wire, mm2: d.mm2 }));
+  }
+  refresh(frame) { // absorb slow lighting drift when nothing is happening
+    const a = analyze(frame, this.ref, this.model, this.opts);
+    if (!a.big && a.darts.length === 0 && a.changedMM2 < 800) this.ref = frame.slice();
+  }
+}
+
+/* ---------- automatic board finding ---------- */
+// rgba: ImageData.data, w×h. Returns { H, points, residual } in the given image's pixels, or {error}.
+function autoCalibrate(rgba, w, h) {
+  const N = w * h, cls = new Uint8Array(N); // 1 red, 2 green
+  for (let i = 0; i < N; i++) {
+    const j = i << 2, r = rgba[j], g = rgba[j + 1], b = rgba[j + 2];
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mx < 45 || mx - mn < 28) continue;
+    if (r === mx && r > 1.45 * g && r > 1.25 * b) cls[i] = 1;
+    else if (g === mx && g > 1.18 * r && g >= 0.9 * b) cls[i] = 2;
+    else if (b === mx && g > 1.35 * r && b < g * 1.15) cls[i] = 2; // teal-ish greens
+  }
+  const rg = new Uint8Array(N);
+  for (let i = 0; i < N; i++) rg[i] = cls[i] ? 1 : 0;
+  const comps = blobs(rg, w, h, 2);
+  if (!comps.length) return { error: 'no-colour' };
+  // the double ring: biggest bounding box with enough pixels and both colours
+  let best = null;
+  for (const c of comps) {
+    if (c.area < N * 0.0015) continue;
+    let x0 = w, y0 = h, x1 = 0, y1 = 0, nr = 0, ng = 0, sx = 0, sy = 0;
+    for (const i of c.px) {
+      const x = i % w, y = (i / w) | 0;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      sx += x; sy += y;
+      if (cls[i] === 1) nr++; else ng++;
+    }
+    const bw = x1 - x0, bh = y1 - y0;
+    if (nr < c.area * 0.2 || ng < c.area * 0.2) continue;
+    if (bw < 40 || bh < 40 || bw / bh > 3.5 || bh / bw > 3.5) continue;
+    const fill = c.area / (bw * bh);
+    const cxm = sx / c.area, cym = sy / c.area;
+    // a ring's centroid sits near its bbox centre and the centre itself is empty
+    const ok = Math.abs(cxm - (x0 + x1) / 2) < bw * 0.12 && Math.abs(cym - (y0 + y1) / 2) < bh * 0.12;
+    if (!ok || fill > 0.5) continue;
+    const score = bw * bh;
+    if (!best || score > best.score) best = { c, score, cx: cxm, cy: cym, bw, bh };
+  }
+  if (!best) return { error: 'no-ring' };
+  const inComp = new Uint8Array(N);
+  for (const i of best.c.px) inComp[i] = 1;
+  const inC = (x, y) => {
+    const xi = Math.round(x), yi = Math.round(y);
+    if (xi < 0 || yi < 0 || xi >= w || yi >= h) return false;
+    const i = yi * w + xi;
+    return inComp[i] || (xi + 1 < w && inComp[i + 1]) || (yi + 1 < h && inComp[i + w]);
+  };
+  const S = 720, rMax = Math.hypot(best.bw, best.bh) * 0.6;
+  const rays = [];
+  for (let k = 0; k < S; k++) {
+    const a = k * 2 * Math.PI / S, dx = Math.cos(a), dy = Math.sin(a);
+    let outer = -1;
+    for (let r = rMax; r > 2; r -= 0.5) if (inC(best.cx + dx * r, best.cy + dy * r)) { outer = r; break; }
+    if (outer < 0) { rays.push(null); continue; }
+    let inner = outer, gap = 0;
+    for (let r = outer; r > 2; r -= 0.5) {
+      if (inC(best.cx + dx * r, best.cy + dy * r)) { inner = r; gap = 0; } else if (++gap > 4) break;
+    }
+    // colour vote across the ring
+    let red = 0, green = 0;
+    for (let r = inner; r <= outer; r += 0.5) {
+      const xi = Math.round(best.cx + dx * r), yi = Math.round(best.cy + dy * r);
+      if (xi < 0 || yi < 0 || xi >= w || yi >= h) continue;
+      const c = cls[yi * w + xi];
+      if (c === 1) red++; else if (c === 2) green++;
+    }
+    const lab = red > green * 1.5 ? 1 : green > red * 1.5 ? 2 : 0;
+    rays.push(lab ? { k, a, outer, inner, lab } : null);
+  }
+  // runs of equal colour around the ring
+  const seq = rays.filter(Boolean);
+  if (seq.length < S * 0.5) return { error: 'ring-incomplete' };
+  let runs = [];
+  for (const r of seq) {
+    const last = runs[runs.length - 1];
+    if (last && last.lab === r.lab) last.items.push(r); else runs.push({ lab: r.lab, items: [r] });
+  }
+  if (runs.length > 1 && runs[0].lab === runs[runs.length - 1].lab) {
+    runs[0].items = runs[runs.length - 1].items.concat(runs[0].items); runs.pop();
+  }
+  // drop tiny noise runs, re-merge
+  for (let pass = 0; pass < 3; pass++) {
+    runs = runs.filter(r => r.items.length >= 4);
+    const merged = [];
+    for (const r of runs) {
+      const last = merged[merged.length - 1];
+      if (last && last.lab === r.lab) last.items = last.items.concat(r.items); else merged.push(r);
+    }
+    if (merged.length > 1 && merged[0].lab === merged[merged.length - 1].lab) {
+      merged[0].items = merged[merged.length - 1].items.concat(merged[0].items); merged.pop();
+    }
+    runs = merged;
+  }
+  if (runs.length !== 20) return { error: 'segments', found: runs.length };
+  // boundary between run i and run i+1 (clockwise on screen = increasing angle)
+  const angDiff = (a, b) => { let d = b - a; while (d < 0) d += 2 * Math.PI; while (d >= 2 * Math.PI) d -= 2 * Math.PI; return d; };
+  const bounds = [];
+  for (let i = 0; i < 20; i++) {
+    const A = runs[i].items[runs[i].items.length - 1], B = runs[(i + 1) % 20].items[0];
+    const a = A.a + angDiff(A.a, B.a) / 2;
+    bounds.push({
+      a, outer: (A.outer + B.outer) / 2, inner: (A.inner + B.inner) / 2,
+      before: runs[i], after: runs[(i + 1) % 20],
+    });
+  }
+  // segment 20 = the red run whose middle points most upward
+  let topRun = -1, topY = Infinity;
+  for (let i = 0; i < 20; i++) {
+    if (runs[i].lab !== 1) continue;
+    const it = runs[i].items, mid = it[(it.length / 2) | 0];
+    const y = Math.sin(mid.a);
+    if (y < topY) { topY = y; topRun = i; }
+  }
+  return fitFromBounds(bounds, topRun, best.cx, best.cy, w, h);
+}
+function fitFromBounds(bounds, topRun, cx, cy, w, h, shift = 0) {
+  const src = [], dst = [];
+  for (let k = 0; k < 20; k++) {
+    // bounds[i] sits between run i and i+1. The 20|1 boundary follows the 20 run.
+    const b = bounds[(topRun + k + shift + 20) % 20];
+    const th = (81 - 18 * k) * Math.PI / 180;
+    src.push([170 * Math.cos(th), 170 * Math.sin(th)]); dst.push([cx + Math.cos(b.a) * b.outer, cy + Math.sin(b.a) * b.outer]);
+    src.push([162 * Math.cos(th), 162 * Math.sin(th)]); dst.push([cx + Math.cos(b.a) * b.inner, cy + Math.sin(b.a) * b.inner]);
+  }
+  let H = homography(src, dst);
+  if (!H) return { error: 'fit' };
+  // one round of outlier rejection
+  const res = src.map((p, i) => { const q = apply(H, p[0], p[1]); return Math.hypot(q[0] - dst[i][0], q[1] - dst[i][1]); });
+  const med = res.slice().sort((a, b) => a - b)[res.length >> 1];
+  const keep = res.map(r => r <= Math.max(2, med * 3));
+  const s2 = src.filter((_, i) => keep[i]), d2 = dst.filter((_, i) => keep[i]);
+  if (s2.length >= 12) H = homography(s2, d2) || H;
+  const res2 = s2.map((p, i) => { const q = apply(H, p[0], p[1]); return Math.hypot(q[0] - d2[i][0], q[1] - d2[i][1]); });
+  const residual = res2.reduce((a, b) => a + b, 0) / res2.length;
+  const points = CAL_POINTS.map(p => apply(H, p.x, p.y));
+  return { H, points, residual, bounds, topRun, cx, cy };
+}
+
+const api = {
+  RINGS, ORDER, CAL_POINTS, DEFAULTS, scoreAt, wireDistance, apply, inv3, mul3, homography, homographyFromCal,
+  cameraModel, project3, buildModel, roiToVideo, roiToBoard, expectedDartVector, analyze, estimateTip,
+  changeMap, motionFraction, Tracker, autoCalibrate, fitFromBounds,
+};
+if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.DartCV = api;
+})(typeof self !== 'undefined' ? self : this);
+</script>
+<script>/* DartsGame — x01 rules (501/301/701), double-out, busts, legs, averages, checkout routes.
+   The match is a plain event log (legs → turns → darts); everything else is derived. */
+(function (root) {
+'use strict';
+
+const val = d => (!d || !d.seg) ? 0 : d.seg * d.mult;
+const isDouble = d => !!d && d.mult === 2 && (d.seg === 25 || (d.seg >= 1 && d.seg <= 20));
+function label(d) {
+  if (!d || !d.seg || !d.mult) return 'Miss';
+  if (d.seg === 25) return d.mult === 2 ? 'Bull' : '25';
+  return (d.mult === 3 ? 'T' : d.mult === 2 ? 'D' : '') + d.seg;
+}
+function spoken(d) {
+  if (!d || !d.seg || !d.mult) return 'miss';
+  if (d.seg === 25) return d.mult === 2 ? 'bullseye' : 'twenty five';
+  return (d.mult === 3 ? 'treble ' : d.mult === 2 ? 'double ' : '') + d.seg;
+}
+
+/* ---------- checkout routes ---------- */
+const ALL = [];
+for (let n = 1; n <= 20; n++) for (const m of [1, 2, 3]) ALL.push({ seg: n, mult: m });
+ALL.push({ seg: 25, mult: 1 }, { seg: 25, mult: 2 });
+const FINISH_PREF = { 20: 0, 16: 0.1, 8: 0.35, 18: 0.4, 12: 0.45, 10: 0.45, 4: 0.6, 2: 0.7, 6: 0.7, 14: 0.7 };
+function finishCost(d) { return d.seg === 25 ? 2.2 : (FINISH_PREF[d.seg] ?? 1); }
+function setupCost(d) {
+  if (d.seg === 25) return d.mult === 2 ? 2 : 1.5;
+  if (d.mult === 3) return ({ 20: 0, 19: 0.15, 18: 0.3, 17: 0.4, 16: 0.45, 15: 0.55 })[d.seg] ?? 0.7;
+  if (d.mult === 1) return 0.35;
+  return 1.1;
+}
+function buildTable(doubleOut) {
+  // best[k][v] = cheapest route finishing exactly v with at most k darts
+  const best = [null, new Array(171).fill(null), new Array(171).fill(null), new Array(171).fill(null)];
+  for (const d of ALL) {
+    const v = val(d);
+    if (v > 170) continue;
+    if (doubleOut && !isDouble(d)) continue;
+    const c = 1 + (doubleOut ? finishCost(d) : (d.mult === 1 ? 0 : 0.3) + (d.seg === 25 ? 0.6 : 0));
+    if (!best[1][v] || c < best[1][v].cost) best[1][v] = { cost: c, route: [d] };
+  }
+  for (let k = 2; k <= 3; k++) {
+    for (let v = 0; v <= 170; v++) best[k][v] = best[k - 1][v];
+    for (const d of ALL) {
+      const sv = val(d), sc = 1 + setupCost(d);
+      for (let v = sv + 1; v <= 170; v++) {
+        const rest = best[k - 1][v - sv];
+        if (!rest) continue;
+        const c = sc + rest.cost;
+        if (!best[k][v] || c < best[k][v].cost - 1e-9) best[k][v] = { cost: c, route: [d].concat(rest.route) };
+      }
+    }
+  }
+  return best;
+}
+const TABLES = {};
+function checkout(score, dartsLeft = 3, doubleOut = true) {
+  if (score < 2 && doubleOut) return null;
+  if (score > 170 || score < 1 || dartsLeft < 1) return null;
+  const key = doubleOut ? 'd' : 's';
+  const t = TABLES[key] || (TABLES[key] = buildTable(doubleOut));
+  const r = t[Math.min(3, dartsLeft)][score];
+  if (!r) return null;
+  const route = r.route.slice(), last = route.pop();
+  route.sort((a, b) => setupCost(a) - setupCost(b) || val(b) - val(a));
+  return route.concat([last]);
+}
+
+/* ---------- match model ---------- */
+function newMatch(cfg) {
+  return {
+    players: cfg.players.slice(), start: cfg.start || 501, doubleOut: cfg.doubleOut !== false,
+    legs: [{ starter: 0, turns: [] }], created: Date.now(),
+  };
+}
+function evalDart(rem, d, doubleOut) {
+  const after = rem - val(d);
+  if (after < 0) return { bust: true, after: rem };
+  if (doubleOut && after === 1) return { bust: true, after: rem };
+  if (after === 0) {
+    if (doubleOut && !isDouble(d)) return { bust: true, after: rem };
+    return { win: true, after: 0 };
+  }
+  return { after };
+}
+// Derive everything about one leg.
+function legState(match, leg) {
+  const n = match.players.length;
+  const scores = new Array(n).fill(match.start);
+  const stats = match.players.map(() => ({ points: 0, darts: 0, turns: 0, high: 0, history: [] }));
+  const turns = [];
+  let winner = null;
+  for (let ti = 0; ti < leg.turns.length; ti++) {
+    const t = leg.turns[ti];
+    const before = scores[t.p];
+    let rem = before, bust = false, win = false;
+    const results = [];
+    for (const d of t.darts) {
+      const r = evalDart(rem, d, match.doubleOut);
+      results.push(r);
+      if (r.bust) { bust = true; break; }
+      rem = r.after;
+      if (r.win) { win = true; break; }
+    }
+    const total = bust ? 0 : before - rem;
+    scores[t.p] = bust ? before : rem;
+    const complete = bust || win || t.darts.length >= 3 || !!t.ended;
+    turns.push({ index: ti, p: t.p, darts: t.darts, before, after: scores[t.p], total, bust, win, complete, ended: !!t.ended });
+    if (complete) {
+      const s = stats[t.p];
+      s.points += total; s.darts += win ? t.darts.length : 3; s.turns++;
+      s.high = Math.max(s.high, total);
+      s.history.push(scores[t.p]);
+    }
+    if (win) { winner = t.p; break; }
+  }
+  const last = turns[turns.length - 1];
+  let active, current;
+  if (winner != null) { active = winner; current = last; }
+  else if (!last) { active = leg.starter; current = null; }
+  else if (!last.complete) { active = last.p; current = last; }
+  else { active = (last.p + 1) % n; current = null; }
+  const dartsThrown = current && !current.complete ? current.darts.length : 0;
+  const before = current && !current.complete ? current.before : scores[active];
+  return { scores, stats, turns, winner, active, current, dartsThrown, before };
+}
+function curLeg(match) { return match.legs[match.legs.length - 1]; }
+function state(match) {
+  const leg = curLeg(match);
+  const s = legState(match, leg);
+  const legsWon = match.players.map(() => 0);
+  const totals = match.players.map(() => ({ points: 0, darts: 0, high: 0, s180: 0 }));
+  for (const L of match.legs) {
+    const ls = L === leg ? s : legState(match, L);
+    if (ls.winner != null) legsWon[ls.winner]++;
+    ls.stats.forEach((st, i) => { totals[i].points += st.points; totals[i].darts += st.darts; totals[i].high = Math.max(totals[i].high, st.high); });
+    for (const t of ls.turns) if (t.total === 180) totals[t.p].s180++;
+  }
+  return Object.assign(s, { legsWon, totals, legIndex: match.legs.length - 1 });
+}
+function addDart(match, dart) {
+  const leg = curLeg(match);
+  const s = legState(match, leg);
+  if (s.winner != null) return { ignored: true };
+  let t = leg.turns[leg.turns.length - 1];
+  if (!s.current || s.current.complete) { t = { p: s.active, darts: [] }; leg.turns.push(t); }
+  t.darts.push({ seg: dart.seg, mult: dart.mult, auto: !!dart.auto, tip: dart.tip || null, wire: dart.wire });
+  const after = legState(match, leg);
+  const lt = after.turns[after.turns.length - 1];
+  return { turn: lt, winner: after.winner };
+}
+// End the active turn early (darts pulled, missed the board). Creates an empty turn if nothing was thrown.
+function endTurn(match) {
+  const leg = curLeg(match);
+  const s = legState(match, leg);
+  if (s.winner != null) return null;
+  if (s.current && !s.current.complete) { leg.turns[leg.turns.length - 1].ended = true; }
+  else leg.turns.push({ p: s.active, darts: [], ended: true });
+  const after = legState(match, leg);
+  return after.turns[after.turns.length - 1];
+}
+function undo(match) {
+  let leg = curLeg(match);
+  if (!leg.turns.length && match.legs.length > 1) { match.legs.pop(); leg = curLeg(match); }
+  const t = leg.turns[leg.turns.length - 1];
+  if (!t) return false;
+  if (t.ended && t.darts.length < 3) { t.ended = false; if (!t.darts.length) leg.turns.pop(); return true; }
+  t.darts.pop();
+  if (!t.darts.length) leg.turns.pop();
+  return true;
+}
+function setDart(match, legIdx, turnIdx, dartIdx, dart) {
+  const t = match.legs[legIdx] && match.legs[legIdx].turns[turnIdx];
+  if (!t) return false;
+  if (dart) {
+    if (dartIdx < t.darts.length) t.darts[dartIdx] = { seg: dart.seg, mult: dart.mult, auto: false };
+    else if (t.darts.length < 3) t.darts.push({ seg: dart.seg, mult: dart.mult, auto: false });
+  } else t.darts.splice(dartIdx, 1);
+  return true;
+}
+function nextLeg(match) {
+  const n = match.players.length;
+  const starter = (curLeg(match).starter + 1) % n;
+  match.legs.push({ starter, turns: [] });
+}
+function average(points, darts) { return darts ? (points / darts) * 3 : 0; }
+
+const api = { val, label, spoken, isDouble, checkout, newMatch, state, legState, addDart, endTurn, undo, setDart, nextLeg, average, evalDart };
+if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.DartsGame = api;
+})(typeof self !== 'undefined' ? self : this);
+</script>
+<script>/* OcheCam app: camera, board alignment, detection loop, scoreboard, keypad, voice. */
+(function () {
+'use strict';
+const CV = window.DartCV, G = window.DartsGame;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const KEY = 'ochecam.v1';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function loadStore() { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } }
+const saved = loadStore();
+const settings = Object.assign({
+  threshold: 24, tipOffsetMM: 18, shadows: true, debug: false, voice: true,
+  start: 501, doubleOut: true, players: ['Player 1', 'Player 2'], lastMode: 'camera',
+}, saved.settings || {});
+let match = saved.match || null;
+let calib = saved.calib || null;
+function persist() { try { localStorage.setItem(KEY, JSON.stringify({ settings, match, calib })); } catch (e) { /* storage unavailable */ } }
+
+/* ---------- elements ---------- */
+const video = $('#video'), overlay = $('#overlay'), octx = overlay.getContext('2d');
+const cam = $('#cam'), calibEl = $('#calib');
+const grab = document.createElement('canvas'), gctx = grab.getContext('2d', { willReadFrequently: true });
+const loupe = $('#loupe'), lctx = $('#loupeCanvas').getContext('2d');
+const maskCanvas = document.createElement('canvas'), mctx = maskCanvas.getContext('2d');
+
+/* ---------- runtime state ---------- */
+let stream = null, track = null, model = null, detecting = false, calibrating = false;
+let calPts = [], dragIdx = -1, lastProc = 0, wakeLock = null;
+let boardHasDarts = false, lastMaskRef = null;
+let pad = { edit: null, mult: 1 };
+let focusTurn = null; // index of an older turn picked from the log for fixing
+const tracker = new CV.Tracker({});
+const cvOpts = () => ({ threshold: settings.threshold, tipOffsetMM: settings.tipOffsetMM, shadows: settings.shadows });
+
+/* ---------- small UI helpers ---------- */
+let toastTimer = 0;
+function toast(msg, ms = 3200) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+}
+function setStatus(text, tone = 'idle') { const s = $('#status'); s.dataset.tone = tone; s.querySelector('span').textContent = text; }
+let calloutTimer = 0;
+function callout(text, cls = '') {
+  const c = $('#callout'), b = c.querySelector('b');
+  b.textContent = text; b.className = cls; c.hidden = false;
+  b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
+  clearTimeout(calloutTimer); calloutTimer = setTimeout(() => { c.hidden = true; }, 1300);
+}
+function showCamMsg(text, btn, onClick, btn2, onClick2) {
+  $('#camMsg').hidden = false; $('#camMsgText').textContent = text;
+  const b = $('#camMsgBtn');
+  b.hidden = !btn; if (btn) { b.textContent = btn; b.onclick = onClick; }
+  let b2 = $('#camMsgBtn2');
+  if (!b2) { b2 = document.createElement('button'); b2.className = 'btn ghost'; b2.id = 'camMsgBtn2'; b2.type = 'button'; b.after(b2); }
+  b2.hidden = !btn2; if (btn2) { b2.textContent = btn2; b2.onclick = onClick2; }
+}
+function hideCamMsg() { $('#camMsg').hidden = true; }
+
+/* ---------- sound + voice ---------- */
+let actx = null;
+function unlockAudio() {
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) { actx = null; }
+  try { if (window.speechSynthesis) speechSynthesis.getVoices(); } catch (e) { /* ignore */ }
+}
+function tock() {
+  if (!actx) return;
+  try {
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = 'triangle'; o.frequency.setValueAtTime(820, t); o.frequency.exponentialRampToValueAtTime(180, t + 0.08);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.14);
+  } catch (e) { /* ignore */ }
+}
+function pickVoice() {
+  try {
+    const vs = speechSynthesis.getVoices();
+    return vs.find(v => /en-GB/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || null;
+  } catch (e) { return null; }
+}
+function speak(parts) {
+  if (!settings.voice || !window.speechSynthesis) return;
+  try {
+    speechSynthesis.cancel();
+    const voice = pickVoice();
+    for (const p of [].concat(parts)) {
+      const u = new SpeechSynthesisUtterance(p);
+      if (voice) u.voice = voice;
+      u.lang = voice ? voice.lang : 'en-GB'; u.rate = 1.02;
+      speechSynthesis.speak(u);
+    }
+  } catch (e) { /* ignore */ }
+}
+const scoreWords = n => n === 180 ? 'One hundred and eighty!' : n === 0 ? 'No score' : String(n);
+
+/* ---------- setup screen ---------- */
+function renderPlayers() {
+  const list = $('#playerList');
+  list.innerHTML = settings.players.map((p, i) => `
+    <div class="player-row">
+      <span class="n">${i + 1}</span>
+      <input type="text" id="pname${i}" value="${esc(p)}" maxlength="18" aria-label="Player ${i + 1} name" autocomplete="off">
+      <button type="button" data-rm="${i}" aria-label="Remove player ${i + 1}" ${settings.players.length <= 1 ? 'disabled' : ''}>×</button>
+    </div>`).join('');
+  $$('input', list).forEach((inp, i) => inp.addEventListener('input', () => { settings.players[i] = inp.value; persist(); }));
+  $$('[data-rm]', list).forEach(b => b.addEventListener('click', () => { settings.players.splice(+b.dataset.rm, 1); renderPlayers(); persist(); }));
+  $('#addPlayer').disabled = settings.players.length >= 4;
+}
+function segSet(id, val) { $$(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === String(val)))); }
+function showSetup() {
+  $('#game').hidden = true; $('#setup').hidden = false;
+  renderPlayers();
+  segSet('startSeg', settings.start); segSet('outSeg', settings.doubleOut ? 'double' : 'straight');
+  $('#voiceOpt').checked = settings.voice;
+  const st = match && G.state(match);
+  if (st) {
+    $('#resumeCard').hidden = false;
+    $('#resumeText').textContent = match.players.map((p, i) => `${p} ${st.scores[i]}`).join(' · ') + ` (leg ${st.legIndex + 1})`;
+  } else $('#resumeCard').hidden = true;
+}
+$('#addPlayer').addEventListener('click', () => { if (settings.players.length < 4) { settings.players.push(`Player ${settings.players.length + 1}`); renderPlayers(); persist(); } });
+$$('#startSeg button').forEach(b => b.addEventListener('click', () => { settings.start = +b.dataset.v; segSet('startSeg', settings.start); persist(); }));
+$$('#outSeg button').forEach(b => b.addEventListener('click', () => { settings.doubleOut = b.dataset.v === 'double'; segSet('outSeg', b.dataset.v); persist(); }));
+$('#voiceOpt').addEventListener('change', e => { settings.voice = e.target.checked; persist(); });
+function newGame() {
+  const names = settings.players.map((p, i) => (p || '').trim() || `Player ${i + 1}`);
+  match = G.newMatch({ players: names, start: settings.start, doubleOut: settings.doubleOut });
+  boardHasDarts = false; persist();
+}
+$('#startCam').addEventListener('click', () => { unlockAudio(); newGame(); settings.lastMode = 'camera'; persist(); showGame(); startCamera(); });
+$('#startManual').addEventListener('click', () => { unlockAudio(); newGame(); settings.lastMode = 'manual'; persist(); showGame(); setManual(); openPad(null); });
+$('#resumeBtn').addEventListener('click', () => {
+  unlockAudio(); showGame();
+  if (settings.lastMode === 'camera') startCamera(); else setManual();
+});
+
+/* ---------- game screen ---------- */
+function showGame() {
+  $('#setup').hidden = true; $('#game').hidden = false;
+  render(); loop();
+}
+function setManual() {
+  stopCamera();
+  $('#game').classList.add('manual');
+  setStatus('Tap scoring', 'idle');
+  $('#camToggle').textContent = 'Turn camera on';
+  render();
+}
+
+/* ---------- camera ---------- */
+async function startCamera() {
+  $('#game').classList.remove('manual');
+  $('#camToggle').textContent = 'Turn camera off';
+  setStatus('Starting camera', 'warn');
+  showCamMsg('Starting the camera…');
+  const inFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    cameraFailed(window.isSecureContext === false
+      ? 'The camera only works when this page is opened from an https:// address.'
+      : 'This browser can’t open the camera. You can still score by tapping.');
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+    });
+  } catch (e) {
+    const name = e && e.name;
+    cameraFailed(inFrame && name === 'NotAllowedError'
+      ? 'The camera is blocked inside this preview window. Open OcheCam from its own web address to let it watch the board. You can still score by tapping.'
+      : name === 'NotAllowedError'
+        ? 'Camera access was refused. Allow the camera for this page in your browser’s site settings, then tap Try again.'
+        : name === 'NotFoundError' ? 'No camera was found on this device.'
+          : `The camera couldn’t start (${name || 'unknown error'}).`);
+    return;
+  }
+  video.srcObject = stream;
+  track = stream.getVideoTracks()[0];
+  try { await video.play(); } catch (e) { /* autoplay with muted should work */ }
+  for (let i = 0; i < 50 && !video.videoWidth; i++) await new Promise(r => setTimeout(r, 100));
+  hideCamMsg(); setupZoom(); requestWake();
+  cam.style.setProperty('--ar', `${video.videoWidth} / ${video.videoHeight}`);
+  if (calib && calib.vw === video.videoWidth && calib.vh === video.videoHeight) {
+    applyCalibration(calib.pts, true);
+    toast('Using your last board setup. If the lines are off the wires, tap “Line up board”.', 4500);
+  } else beginCalibration();
+}
+function cameraFailed(msg) {
+  stream = null; detecting = false;
+  setStatus('Camera off', 'alert');
+  showCamMsg(msg, 'Try again', () => startCamera(), 'Score by tapping', () => { setManual(); openPad(null); });
+}
+function stopCamera() {
+  detecting = false; calibrating = false; model = null; calibEl.hidden = true; cam.classList.remove('big'); $('#game').classList.remove('calibrating');
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; track = null; }
+  video.srcObject = null;
+  if (wakeLock) { try { wakeLock.release(); } catch (e) { /* ignore */ } wakeLock = null; }
+}
+async function requestWake() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && stream) requestWake(); });
+function setupZoom() {
+  const row = $('#zoomRow');
+  let caps = null;
+  try { caps = track && track.getCapabilities ? track.getCapabilities() : null; } catch (e) { caps = null; }
+  if (!caps || !caps.zoom) { row.hidden = true; return; }
+  const z = $('#zoom');
+  z.min = caps.zoom.min; z.max = caps.zoom.max; z.step = caps.zoom.step || 0.1;
+  const cur = (track.getSettings && track.getSettings().zoom) || caps.zoom.min;
+  z.value = cur; $('#zoomVal').textContent = `${(+cur).toFixed(1)}×`;
+  row.hidden = false;
+}
+$('#zoom').addEventListener('input', async e => {
+  const v = +e.target.value; $('#zoomVal').textContent = `${v.toFixed(1)}×`;
+  try { await track.applyConstraints({ advanced: [{ zoom: v }] }); } catch (err) { /* unsupported */ }
+});
+$('#zoom').addEventListener('change', () => { if (model) { toast('Zoom changed. Line up the board again.'); closeSheets(); beginCalibration(); } });
+
+/* ---------- board alignment ---------- */
+function beginCalibration() {
+  if (!stream) { toast('Turn the camera on first.'); return; }
+  calibrating = true; detecting = false; calPts = [];
+  cam.classList.add('big'); calibEl.hidden = false; $('#game').classList.add('calibrating');
+  setStatus('Line up the board', 'warn');
+  renderCalib();
+}
+function calibDiagram(step) {
+  const s = 93.5 / 170;
+  let h = `<circle r="96" fill="#101614"/>`;
+  for (let k = 0; k < 20; k++) {
+    const a0 = (99 - 18 * k) * Math.PI / 180, a1 = (81 - 18 * k) * Math.PI / 180;
+    const ring = (r0, r1, col) => {
+      const p = (r, a) => `${(r * s * Math.cos(a)).toFixed(1)} ${(-r * s * Math.sin(a)).toFixed(1)}`;
+      h += `<path d="M${p(r0, a0)} L${p(r1, a0)} A${r1 * s} ${r1 * s} 0 0 1 ${p(r1, a1)} L${p(r0, a1)} A${r0 * s} ${r0 * s} 0 0 0 ${p(r0, a0)}Z" fill="${col}"/>`;
+    };
+    const even = k % 2 === 0;
+    ring(15.9, 162, even ? '#1d1d1b' : '#e2d3ac');
+    ring(99, 107, even ? '#c63a2c' : '#2f8a57');
+    ring(162, 170, even ? '#c63a2c' : '#2f8a57');
+  }
+  h += `<circle r="${15.9 * s}" fill="#2f8a57"/><circle r="${6.35 * s}" fill="#c63a2c"/>`;
+  CV.CAL_POINTS.forEach((p, i) => {
+    const x = p.x * s, y = -p.y * s;
+    const done = i < step, cur = i === step;
+    if (cur) h += `<circle cx="${x}" cy="${y}" r="11" fill="none" stroke="#e8d4a0" stroke-width="3"><animate attributeName="r" values="7;13;7" dur="1.4s" repeatCount="indefinite"/></circle>`;
+    h += `<circle cx="${x}" cy="${y}" r="${cur ? 5 : 4}" fill="${done ? '#46b077' : cur ? '#e8d4a0' : '#9faba4'}"/>`;
+  });
+  return h;
+}
+function calibQuality(pts) {
+  const H = CV.homographyFromCal(pts);
+  if (!H) return { warn: 'Those points don’t make a board shape. Tap Start over.' };
+  const c = CV.apply(H, 0, 0);
+  let rad = 0;
+  for (const p of pts) rad += Math.hypot(p[0] - c[0], p[1] - c[1]);
+  rad /= 4;
+  const camm = CV.cameraModel(H, video.videoWidth, video.videoHeight);
+  const warns = [];
+  if (rad < 150) warns.push('The board is small in the picture. Move the phone closer or zoom in for better accuracy.');
+  if (camm.angle < 10) warns.push('You’re filming almost straight on. Darts read better from 20–45° off to the side or below.');
+  if (camm.angle > 62) warns.push('That’s a very steep angle. Move the phone a little more in front of the board.');
+  return { H, warn: warns.join(' ') };
+}
+function renderCalib() {
+  const n = calPts.length;
+  $$('#calibSteps i').forEach((el, i) => el.classList.toggle('on', i < n));
+  $('#calibDiagram').innerHTML = calibDiagram(n);
+  if (n < 4) {
+    $('#calibTitle').textContent = `Tap the outer edge of the double ring, in the middle of the ${CV.CAL_POINTS[n].seg}`;
+    $('#calibHint').textContent = 'Hold and drag to place it exactly. A magnifier shows the spot under your finger.';
+  } else {
+    $('#calibTitle').textContent = 'Check the lines sit on the wires';
+    $('#calibHint').textContent = 'Drag any of the four points to adjust, then tap Done.';
+  }
+  const q = n === 4 ? calibQuality(calPts) : null;
+  $('#calibWarn').hidden = !(q && q.warn);
+  if (q && q.warn) $('#calibWarn').textContent = q.warn;
+  $('#calibDone').disabled = !(q && q.H);
+}
+function applyCalibration(pts, silent) {
+  const H = CV.homographyFromCal(pts);
+  if (!H) { toast('Couldn’t use those points. Try again.'); return false; }
+  model = CV.buildModel(H, video.videoWidth, video.videoHeight);
+  calib = { pts: pts.map(p => [p[0], p[1]]), vw: video.videoWidth, vh: video.videoHeight };
+  persist();
+  tracker.setModel(model); tracker.setOptions(cvOpts());
+  calibrating = false; detecting = true; boardHasDarts = false;
+  cam.classList.remove('big'); calibEl.hidden = true; $('#game').classList.remove('calibrating');
+  setStatus('Watching the board', 'live');
+  if (!silent) { const q = calibQuality(pts); if (q.warn) toast(q.warn, 6000); else toast('Board lined up. Throw!'); }
+  syncTracker();
+  return true;
+}
+$('#calibBtn').addEventListener('click', () => { if (calibrating && calPts.length === 4) applyCalibration(calPts); else beginCalibration(); });
+$('#calibReset').addEventListener('click', () => { calPts = []; renderCalib(); });
+$('#calibDone').addEventListener('click', () => applyCalibration(calPts));
+$('#sizeBtn').addEventListener('click', () => { cam.classList.toggle('big'); $('#sizeBtn').textContent = cam.classList.contains('big') ? 'Smaller' : 'Bigger'; });
+$('#autoBtn').addEventListener('click', () => {
+  if (!video.videoWidth) return;
+  const vw = video.videoWidth, vh = video.videoHeight, s = Math.min(1, 900 / Math.max(vw, vh));
+  const w = Math.round(vw * s), h = Math.round(vh * s);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const cx = c.getContext('2d', { willReadFrequently: true });
+  cx.drawImage(video, 0, 0, w, h);
+  const r = CV.autoCalibrate(cx.getImageData(0, 0, w, h).data, w, h);
+  if (r.error) { toast('Couldn’t find the board on its own. Tap the four points instead.', 4500); return; }
+  calPts = r.points.map(p => [p[0] / s, p[1] / s]);
+  renderCalib();
+  toast('Found the board. Check the lines, then tap Done.');
+});
+
+/* overlay geometry: video pixels <-> screen pixels inside the camera box */
+function viewRect() {
+  const r = cam.getBoundingClientRect(), vw = video.videoWidth || 16, vh = video.videoHeight || 9;
+  const s = Math.min(r.width / vw, r.height / vh);
+  return { r, s, ox: (r.width - vw * s) / 2, oy: (r.height - vh * s) / 2 };
+}
+function toVideo(e) {
+  const v = viewRect();
+  return [(e.clientX - v.r.left - v.ox) / v.s, (e.clientY - v.r.top - v.oy) / v.s];
+}
+function showLoupe(e, p) {
+  const v = viewRect();
+  const x = e.clientX - v.r.left, y = e.clientY - v.r.top;
+  loupe.hidden = false;
+  loupe.style.left = `${Math.min(v.r.width - 136, Math.max(4, x - 66))}px`;
+  loupe.style.top = `${y - 160 < 4 ? y + 40 : y - 160}px`;
+  const R = 26;
+  lctx.fillStyle = '#000'; lctx.fillRect(0, 0, 264, 264);
+  try { lctx.drawImage(video, p[0] - R, p[1] - R, 2 * R, 2 * R, 0, 0, 264, 264); } catch (err) { /* ignore */ }
+  lctx.strokeStyle = '#e8d4a0'; lctx.lineWidth = 2;
+  lctx.beginPath(); lctx.moveTo(132, 112); lctx.lineTo(132, 152); lctx.moveTo(112, 132); lctx.lineTo(152, 132); lctx.stroke();
+}
+overlay.addEventListener('pointerdown', e => {
+  if (!calibrating) return;
+  const p = toVideo(e);
+  if (calPts.length === 4) {
+    const v = viewRect();
+    let best = -1, bd = 44;
+    calPts.forEach((q, i) => { const d = Math.hypot((q[0] - p[0]) * v.s, (q[1] - p[1]) * v.s); if (d < bd) { bd = d; best = i; } });
+    dragIdx = best;
+  } else { calPts.push(p); dragIdx = calPts.length - 1; }
+  if (dragIdx >= 0) { overlay.setPointerCapture(e.pointerId); showLoupe(e, calPts[dragIdx]); renderCalib(); }
+  e.preventDefault();
+});
+overlay.addEventListener('pointermove', e => {
+  if (dragIdx < 0) return;
+  calPts[dragIdx] = toVideo(e); showLoupe(e, calPts[dragIdx]);
+});
+const endDrag = () => { if (dragIdx >= 0) { dragIdx = -1; loupe.hidden = true; renderCalib(); } };
+overlay.addEventListener('pointerup', endDrag);
+overlay.addEventListener('pointercancel', endDrag);
+
+/* ---------- drawing ---------- */
+function drawBoard(H, T, alpha, numbers) {
+  octx.lineWidth = 1.5;
+  octx.strokeStyle = `rgba(232, 212, 160, ${alpha})`;
+  for (const rr of [6.35, 15.9, 99, 107, 162, 170]) {
+    octx.beginPath();
+    for (let k = 0; k <= 96; k++) {
+      const a = k * Math.PI / 48, p = CV.apply(H, rr * Math.cos(a), rr * Math.sin(a)), q = T(p[0], p[1]);
+      k ? octx.lineTo(q[0], q[1]) : octx.moveTo(q[0], q[1]);
+    }
+    octx.stroke();
+  }
+  octx.beginPath();
+  for (let k = 0; k < 20; k++) {
+    const a = (81 - 18 * k) * Math.PI / 180;
+    const p0 = T(...CV.apply(H, 15.9 * Math.cos(a), 15.9 * Math.sin(a))), p1 = T(...CV.apply(H, 170 * Math.cos(a), 170 * Math.sin(a)));
+    octx.moveTo(p0[0], p0[1]); octx.lineTo(p1[0], p1[1]);
+  }
+  octx.stroke();
+  if (numbers) {
+    octx.font = '600 13px "Barlow Semi Condensed", sans-serif';
+    octx.textAlign = 'center'; octx.textBaseline = 'middle';
+    CV.ORDER.forEach((n, k) => {
+      const a = (90 - 18 * k) * Math.PI / 180, q = T(...CV.apply(H, 196 * Math.cos(a), 196 * Math.sin(a)));
+      octx.fillStyle = 'rgba(16, 22, 20, 0.75)'; octx.beginPath(); octx.arc(q[0], q[1], 10, 0, 7); octx.fill();
+      octx.fillStyle = '#e8d4a0'; octx.fillText(String(n), q[0], q[1] + 0.5);
+    });
+  }
+}
+function shownTurn(st) {
+  if (focusTurn != null && st.turns[focusTurn]) return st.turns[focusTurn];
+  if (st.current && st.current.darts.length) return st.current;
+  const last = st.turns[st.turns.length - 1];
+  return last || null;
+}
+function drawOverlay() {
+  const v = viewRect(), dpr = window.devicePixelRatio || 1;
+  const W = Math.round(v.r.width * dpr), Hh = Math.round(v.r.height * dpr);
+  if (overlay.width !== W || overlay.height !== Hh) { overlay.width = W; overlay.height = Hh; }
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  octx.clearRect(0, 0, v.r.width, v.r.height);
+  if (!video.videoWidth || !stream) return;
+  const T = (x, y) => [v.ox + x * v.s, v.oy + y * v.s];
+  let H = null;
+  if (calibrating && calPts.length === 4) H = CV.homographyFromCal(calPts);
+  else if (!calibrating && model) H = model.H;
+  if (H) drawBoard(H, T, calibrating ? 0.95 : 0.3, calibrating);
+  if (!calibrating && model && settings.debug && tracker.lastAnalysis) {
+    const a = tracker.lastAnalysis;
+    if (lastMaskRef !== a) {
+      lastMaskRef = a;
+      maskCanvas.width = a.w; maskCanvas.height = a.h;
+      const img = mctx.createImageData(a.w, a.h);
+      for (let i = 0; i < a.mask.length; i++) if (a.mask[i]) { const j = i * 4; img.data[j] = 255; img.data[j + 1] = 40; img.data[j + 2] = 200; img.data[j + 3] = 190; }
+      mctx.putImageData(img, 0, 0);
+    }
+    const { sx, sy, sw, sh } = model.roi, p = T(sx, sy);
+    octx.drawImage(maskCanvas, p[0], p[1], sw * v.s, sh * v.s);
+    const pr = T(sx, sy), pr2 = T(sx + sw, sy + sh);
+    octx.strokeStyle = 'rgba(255, 40, 200, 0.5)'; octx.strokeRect(pr[0], pr[1], pr2[0] - pr[0], pr2[1] - pr[1]);
+  }
+  if (!calibrating && match) {
+    const st = G.state(match);
+    const t = st.current && st.current.darts.length ? st.current : (boardHasDarts ? st.turns[st.turns.length - 1] : null);
+    if (t && boardHasDarts) t.darts.forEach((d, i) => {
+      if (!d.tip) return;
+      const q = T(d.tip.vx, d.tip.vy);
+      octx.fillStyle = d.wire != null && d.wire < 2 ? '#e8d4a0' : '#46b077';
+      octx.strokeStyle = '#101614'; octx.lineWidth = 2;
+      octx.beginPath(); octx.arc(q[0], q[1], 9, 0, 7); octx.fill(); octx.stroke();
+      octx.fillStyle = '#101614'; octx.font = '800 12px "Barlow Semi Condensed", sans-serif'; octx.textAlign = 'center'; octx.textBaseline = 'middle';
+      octx.fillText(String(i + 1), q[0], q[1] + 0.5);
+      octx.font = '700 14px "Barlow Semi Condensed", sans-serif'; octx.textAlign = 'left';
+      const lab = G.label(d), tw = octx.measureText(lab).width;
+      octx.fillStyle = 'rgba(16, 22, 20, 0.8)'; octx.fillRect(q[0] + 12, q[1] - 10, tw + 10, 20);
+      octx.fillStyle = '#f1eee4'; octx.fillText(lab, q[0] + 17, q[1] + 0.5);
+    });
+  }
+  if (calibrating) {
+    calPts.forEach((p, i) => {
+      const q = T(p[0], p[1]);
+      octx.strokeStyle = '#101614'; octx.lineWidth = 3; octx.beginPath(); octx.arc(q[0], q[1], 10, 0, 7); octx.stroke();
+      octx.strokeStyle = '#e8d4a0'; octx.lineWidth = 2; octx.beginPath(); octx.arc(q[0], q[1], 10, 0, 7); octx.stroke();
+      octx.fillStyle = '#e8d4a0'; octx.beginPath(); octx.arc(q[0], q[1], 2.5, 0, 7); octx.fill();
+      if (calPts.length < 4) {
+        octx.font = '700 13px "Barlow Semi Condensed", sans-serif'; octx.textAlign = 'center'; octx.textBaseline = 'middle';
+        octx.fillStyle = 'rgba(16, 22, 20, 0.8)'; octx.fillRect(q[0] - 12, q[1] - 32, 24, 18);
+        octx.fillStyle = '#e8d4a0'; octx.fillText(String(CV.CAL_POINTS[i].seg), q[0], q[1] - 23);
+      }
+    });
+  }
+}
+
+/* ---------- detection loop ---------- */
+let looping = false;
+function loop() {
+  if (looping) return;
+  looping = true;
+  const step = now => {
+    try {
+      if (detecting && model && stream && video.readyState >= 2 && now - lastProc >= 66) { lastProc = now; processFrame(now); }
+      if (!$('#game').hidden) drawOverlay();
+    } catch (err) { console.error(err); }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function processFrame(now) {
+  if (video.videoWidth !== model.vw || video.videoHeight !== model.vh) {
+    detecting = false; toast('The camera view changed shape. Line up the board again.'); beginCalibration(); return;
+  }
+  const { sx, sy, sw, sh, dw, dh } = model.roi;
+  if (grab.width !== dw || grab.height !== dh) { grab.width = dw; grab.height = dh; }
+  gctx.drawImage(video, sx, sy, sw, sh, 0, 0, dw, dh);
+  const frame = gctx.getImageData(0, 0, dw, dh).data;
+  for (const e of tracker.process(frame, now)) handleEvent(e);
+}
+function handleEvent(e) {
+  if (e.type === 'ready') { hideCamMsg(); statusForState(); }
+  else if (e.type === 'dart') onDetectedDart(e);
+  else if (e.type === 'clear') onBoardClear();
+  else if (e.type === 'blocked') setStatus('Board blocked', 'warn');
+  else if (e.type === 'absorbed') statusForState();
+  else if (e.type === 'moved') {
+    setStatus('View changed', 'alert');
+    showCamMsg('The board looks different from before. Did the phone move?', 'Line up board', () => { hideCamMsg(); beginCalibration(); },
+      'Keep going', () => { hideCamMsg(); tracker.ref = null; statusForState(); });
+  }
+}
+function statusForState() {
+  if (!stream) return;
+  if (calibrating) return setStatus('Line up the board', 'warn');
+  const st = G.state(match);
+  if (st.winner != null) return setStatus('Leg won', 'live');
+  if (tracker.expectClear) return setStatus('Pull your darts', 'warn');
+  setStatus(`Watching · ${match.players[st.active]}`, 'live');
+}
+function syncTracker() {
+  if (!match) return;
+  const st = G.state(match);
+  const last = st.turns[st.turns.length - 1];
+  tracker.expectClear = !!(boardHasDarts && (!st.current || st.current.complete || st.winner != null) && last && last.complete);
+  const cur = st.current && !st.current.complete ? st.current : null;
+  tracker.remaining = cur ? 3 - cur.darts.length : 3;
+  tracker.tips = cur ? cur.darts.filter(d => d.tip).map(d => d.tip) : [];
+  statusForState();
+}
+function onDetectedDart(e) {
+  if (!match || G.state(match).winner != null) return;
+  const tip = { vx: +e.tip.vx.toFixed(1), vy: +e.tip.vy.toFixed(1), bx: +e.tip.bx.toFixed(1), by: +e.tip.by.toFixed(1) };
+  const res = G.addDart(match, { seg: e.dart.seg, mult: e.dart.mult, auto: true, tip, wire: +e.wire.toFixed(1) });
+  boardHasDarts = true;
+  tock();
+  afterDart(res, true);
+}
+function afterDart(res, flash) {
+  if (res.ignored) return;
+  focusTurn = null;
+  persist();
+  const t = res.turn;
+  if (res.winner != null) { speak(['Game shot, and the leg.', match.players[res.winner]]); render(); syncTracker(); showWin(); return; }
+  if (t.bust) { callout('Bust', 'bust'); speak('Bust'); }
+  else if (t.complete) announceTurn(t);
+  render(flash ? t.darts.length - 1 : -1);
+  syncTracker();
+}
+function announceTurn(t) {
+  callout(String(t.total), t.total === 180 ? 'ton' : t.total >= 100 ? 'ton' : '');
+  const st = G.state(match);
+  const parts = [scoreWords(t.total)];
+  const nxt = st.active, rem = st.scores[nxt];
+  if (st.winner == null && rem <= 170 && G.checkout(rem, 3, match.doubleOut)) parts.push(`${match.players[nxt]}, you require ${rem}`);
+  speak(parts);
+}
+function onBoardClear() {
+  boardHasDarts = false;
+  const st = G.state(match);
+  if (st.winner == null && st.current && !st.current.complete && st.current.darts.length) {
+    const t = G.endTurn(match);
+    persist();
+    if (t) announceTurn(t);
+  }
+  render(); syncTracker();
+}
+
+/* ---------- scoreboard ---------- */
+function render(flashIdx = -1) {
+  if (!match) return;
+  const st = G.state(match), n = match.players.length;
+  const sc = $('#scores');
+  sc.style.setProperty('--cols', n === 1 ? 1 : 2);
+  sc.dataset.n = n;
+  sc.innerHTML = match.players.map((name, i) => {
+    const rem = st.scores[i], active = i === st.active && st.winner == null;
+    let co = '';
+    if (rem <= 170) {
+      const left = active ? 3 - st.dartsThrown : 3;
+      const route = G.checkout(rem, left, match.doubleOut);
+      co = route ? route.map(G.label).join(' · ') : (active ? '<span class="none">No checkout</span>' : '');
+    }
+    const tot = st.totals[i], avg = G.average(tot.points, tot.darts);
+    const myTurns = st.turns.filter(t => t.p === i && t.complete);
+    const lastT = myTurns[myTurns.length - 1];
+    const hist = [match.start].concat(st.stats[i].history).slice(0, -1).slice(-4);
+    const legs = Array.from({ length: Math.max(st.legsWon[i], 0) }, () => '<i class="won"></i>').join('');
+    return `<div class="pl ${active ? 'active' : ''}">
+      <div class="head"><span class="name">${esc(name)}</span><span class="legs" aria-label="${st.legsWon[i]} legs won">${legs}</span></div>
+      <div class="rem">${rem}</div>
+      <div class="co ${co.includes('none') ? 'none' : ''}">${co}</div>
+      <div class="meta"><span>Avg ${avg ? avg.toFixed(1) : '–'}</span><span>Last ${lastT ? (lastT.bust ? 'bust' : lastT.total) : '–'}</span>${tot.s180 ? `<span>180s ${tot.s180}</span>` : ''}</div>
+      <div class="chalk" aria-label="Previous scores">${hist.map(h => `<s>${h}</s>`).join('')}</div>
+    </div>`;
+  }).join('');
+
+  const t = shownTurn(st);
+  const isCurrent = t && st.current === t && !t.complete;
+  const who = t ? match.players[t.p] : match.players[st.active];
+  const focused = focusTurn != null && st.turns[focusTurn] === t;
+  $('#turnWho').textContent = focused ? `Fixing ${who}’s turn` : !t || (t.complete && st.winner == null) ? `${match.players[st.active]} to throw` : `${who} · this turn`;
+  $('#turnNote').innerHTML = focused ? '<button type="button" id="unfocus">Back to the live turn</button>'
+    : esc(t && t.complete && st.winner == null ? `Last turn: ${who} · tap a dart to fix it` : (t ? 'Tap a dart to fix it' : ''));
+  const log = $('#log');
+  const done = st.turns.filter(x => x.complete).slice(-10).reverse();
+  log.innerHTML = done.map(x => `<button type="button" data-turn="${x.index}" class="${x.index === focusTurn ? 'focus' : ''}">
+      <span class="who">${esc(match.players[x.p])}</span>
+      <span class="ds">${x.darts.length ? x.darts.map(G.label).join(' ') : 'no darts'}</span>
+      <span class="tt ${x.bust ? 'bust' : ''}">${x.bust ? 'Bust' : x.total}</span>
+      <span class="rm">${x.after}</span></button>`).join('');
+  $$('#turn .dart').forEach((el, i) => {
+    const d = t && t.darts[i];
+    el.classList.toggle('filled', !!d);
+    el.classList.toggle('check', !!(d && d.auto && d.wire != null && d.wire < 2));
+    el.querySelector('b').textContent = d ? G.label(d) : '–';
+    el.querySelector('small').textContent = d ? (d.auto ? (d.wire != null && d.wire < 2 ? 'Check' : 'Camera') : 'Typed') : `Dart ${i + 1}`;
+    el.classList.remove('flash');
+    if (i === flashIdx && isCurrent !== undefined) { void el.offsetWidth; el.classList.add('flash'); }
+    el.style.opacity = t && t.complete && st.winner == null && !d ? '0.5' : '';
+  });
+  const total = $('#turnTotal');
+  total.classList.toggle('bust', !!(t && t.bust));
+  total.querySelector('b').textContent = t ? (t.bust ? 'Bust' : t.total) : 0;
+  total.querySelector('small').textContent = t && t.complete ? 'Scored' : 'So far';
+  $('#undoBtn').disabled = !st.turns.length && match.legs.length <= 1;
+}
+
+/* ---------- keypad ---------- */
+const nums = $('#nums');
+nums.innerHTML = Array.from({ length: 20 }, (_, i) => `<button type="button" data-n="${i + 1}">${i + 1}</button>`).join('');
+function setMult(m) { pad.mult = m; $$('#mults button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.m === m))); }
+$$('#mults button').forEach(b => b.addEventListener('click', () => setMult(+b.dataset.m)));
+function liveTitle() {
+  const st = G.state(match);
+  if (st.winner != null) return 'Leg finished';
+  const cur = st.current && !st.current.complete ? st.current.darts.map(G.label).join(' · ') : '';
+  return cur ? `${match.players[st.active]}: ${cur}` : `${match.players[st.active]} to throw`;
+}
+function openPad(edit) {
+  pad.edit = edit; setMult(1);
+  if (edit) {
+    const t = match.legs[edit.leg].turns[edit.turn], d = t.darts[edit.dart];
+    $('#padTitle').textContent = d ? `Change dart ${edit.dart + 1} (was ${G.label(d)})` : `Add dart ${edit.dart + 1} to ${match.players[t.p]}’s turn`;
+    $('#padDel').hidden = !d;
+  } else {
+    $('#padTitle').textContent = liveTitle();
+    $('#padDel').hidden = true;
+  }
+  $('#pad').hidden = false;
+}
+function enterDart(d) {
+  unlockAudio();
+  if (pad.edit) {
+    G.setDart(match, pad.edit.leg, pad.edit.turn, pad.edit.dart, d);
+    persist(); closeSheets();
+    const st = G.state(match);
+    render(); syncTracker();
+    if (st.winner != null) showWin();
+    return;
+  }
+  const res = G.addDart(match, d);
+  if (stream && d.seg) boardHasDarts = true;
+  afterDart(res, true);
+  if (!res.ignored && !$('#pad').hidden) $('#padTitle').textContent = liveTitle();
+  setMult(1);
+}
+nums.addEventListener('click', e => { const b = e.target.closest('[data-n]'); if (b) enterDart({ seg: +b.dataset.n, mult: pad.mult }); });
+$$('.specials button').forEach(b => b.addEventListener('click', () => {
+  const s = b.dataset.s;
+  if (s === '25') enterDart({ seg: 25, mult: 1 });
+  else if (s === 'bull') enterDart({ seg: 25, mult: 2 });
+  else if (s === 'miss') enterDart({ seg: 0, mult: 0 });
+  else if (s === 'del' && pad.edit) { G.setDart(match, pad.edit.leg, pad.edit.turn, pad.edit.dart, null); persist(); closeSheets(); render(); syncTracker(); }
+}));
+$('#turn').addEventListener('click', e => {
+  const b = e.target.closest('.dart'); if (!b || !match) return;
+  const st = G.state(match), t = shownTurn(st), i = +b.dataset.i;
+  const legIdx = match.legs.length - 1;
+  if (t && i < t.darts.length) openPad({ leg: legIdx, turn: t.index, dart: i });
+  else if (t && t.complete && !t.bust && !t.win && t.darts.length < 3 && st.winner == null) openPad({ leg: legIdx, turn: t.index, dart: t.darts.length });
+  else openPad(null);
+});
+$('#padBtn').addEventListener('click', () => openPad(null));
+$('#log').addEventListener('click', e => { const b = e.target.closest('[data-turn]'); if (!b) return; focusTurn = +b.dataset.turn; render(); });
+$('#turnNote').addEventListener('click', e => { if (e.target.id === 'unfocus') { focusTurn = null; render(); } });
+$('#missBtn').addEventListener('click', () => { unlockAudio(); afterDart(G.addDart(match, { seg: 0, mult: 0 }), true); if (!$('#pad').hidden && !pad.edit) $('#padTitle').textContent = liveTitle(); });
+$('#undoBtn').addEventListener('click', () => { if (G.undo(match)) { persist(); $('#win').hidden = true; render(); syncTracker(); } });
+$('#nextBtn').addEventListener('click', () => {
+  unlockAudio();
+  const st = G.state(match);
+  if (st.winner != null) return showWin();
+  const t = G.endTurn(match);
+  persist();
+  if (t && t.darts.length) announceTurn(t);
+  render(); syncTracker();
+});
+
+/* ---------- sheets ---------- */
+function closeSheets() { $('#pad').hidden = true; $('#settings').hidden = true; $('#scrim').hidden = true; pad.edit = null; }
+$$('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
+$('#scrim').addEventListener('click', closeSheets);
+function sensLabel(v) { return `${Math.round((48 - v) / 36 * 100)}%`; }
+$('#menuBtn').addEventListener('click', () => {
+  $('#sens').value = settings.threshold; $('#sensVal').textContent = sensLabel(settings.threshold);
+  $('#tipLen').value = settings.tipOffsetMM; $('#tipVal').textContent = `${settings.tipOffsetMM} mm`;
+  $('#shadowOpt').checked = settings.shadows; $('#debugOpt').checked = settings.debug; $('#voiceOpt2').checked = settings.voice;
+  $('#recalBtn').disabled = !stream;
+  $('#newGameBtn').textContent = 'New game';
+  $('#pad').hidden = true; $('#settings').hidden = false; $('#scrim').hidden = false;
+});
+$('#sens').addEventListener('input', e => { settings.threshold = +e.target.value; $('#sensVal').textContent = sensLabel(settings.threshold); tracker.setOptions(cvOpts()); persist(); });
+$('#tipLen').addEventListener('input', e => { settings.tipOffsetMM = +e.target.value; $('#tipVal').textContent = `${settings.tipOffsetMM} mm`; tracker.setOptions(cvOpts()); persist(); });
+$('#shadowOpt').addEventListener('change', e => { settings.shadows = e.target.checked; tracker.setOptions(cvOpts()); persist(); });
+$('#debugOpt').addEventListener('change', e => { settings.debug = e.target.checked; persist(); });
+$('#voiceOpt2').addEventListener('change', e => { settings.voice = e.target.checked; persist(); });
+$('#recalBtn').addEventListener('click', () => { closeSheets(); beginCalibration(); });
+$('#camToggle').addEventListener('click', () => {
+  closeSheets();
+  if (stream) { settings.lastMode = 'manual'; persist(); setManual(); } else { settings.lastMode = 'camera'; persist(); startCamera(); }
+});
+let newGameArmed = 0;
+$('#newGameBtn').addEventListener('click', e => {
+  const now = Date.now();
+  if (now - newGameArmed > 3000) { newGameArmed = now; e.target.textContent = 'Tap again to end this game'; return; }
+  newGameArmed = 0; closeSheets(); stopCamera(); match = null; persist(); showSetup();
+});
+
+/* ---------- leg won ---------- */
+function showWin() {
+  const st = G.state(match);
+  if (st.winner == null) return;
+  $('#winLeg').textContent = `Leg ${st.legIndex + 1}`;
+  const wt = st.turns[st.turns.length - 1];
+  $('#winWho').textContent = `${match.players[st.winner]} checks out ${wt.total} on ${G.label(wt.darts[wt.darts.length - 1])}`;
+  const rows = match.players.map((p, i) => {
+    const s = st.stats[i];
+    return `<tr><td>${esc(p)}</td><td>${st.legsWon[i]}</td><td>${s.darts ? G.average(s.points, s.darts).toFixed(1) : '–'}</td><td>${s.darts}</td><td>${s.high || '–'}</td></tr>`;
+  }).join('');
+  $('#winTable').innerHTML = `<tr><th>Player</th><th>Legs</th><th>Avg</th><th>Darts</th><th>Best</th></tr>${rows}`;
+  $('#win').hidden = false;
+}
+$('#winUndo').addEventListener('click', () => { G.undo(match); persist(); $('#win').hidden = true; render(); syncTracker(); });
+$('#winNext').addEventListener('click', () => {
+  G.nextLeg(match); persist(); $('#win').hidden = true; render(); syncTracker();
+  const st = G.state(match);
+  speak(`${match.players[st.active]} to throw first`);
+});
+
+/* ---------- boot ---------- */
+window.__ochecam = { tracker, getModel: () => model };
+showSetup();
+})();
+</script>
+
+</body>
+</html>
